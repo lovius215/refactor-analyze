@@ -64,7 +64,8 @@
 | **2. DB 컬럼 스캔** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | `db-connection.md`(점프 호스트 지원)를 기반으로 실제 DB에서 모든 테이블/컬럼/Trigger를 스캔하여 `db-schema.md` 및 `db/<table>.md` 생성. |
 | **3. 번호별 심층 분석** | `refactor-analyze analyze <번호>` | `refactor:analyze <번호>` | `raa` | `project/<번호>/` 폴더를 생성하고 비즈니스 로직, 데이터 흐름, SQL, 의존성, 데드코드, 복잡도를 분석하며 **`backlog.md` 자동 생성**. |
 | **4. 번호별 재분석** | `refactor-analyze reanalyze <번호>` | `refactor:reanalyze <번호>` | `rar` | `backlog.md`에 보충된 설명이나 코드 변경을 반영하여 **재분석**하고 `project/<번호>/` 내 모든 문서 갱신. |
-| **5. 확정 커밋 및 동기화** | `refactor-analyze commit [번호]` | `refactor:commit [번호]` | `rac` | 확인 후 `project/index.md` 상태 갱신, 자동 Git 커밋 및 원격 sync(충돌 해결 지원 포함) 실행. |
-| **6. PDF 내보내기** | `refactor-analyze pdf [대상] [--merge] [--output ...]` *(또는 `md2pdf`)* | `refactor:pdf [대상]` | `rap` | 지정한 `.md` 파일, 번호 폴더(예: `001`) 또는 `project/` 전체를 `.pdf`로 변환(`--merge`로 단일 PDF 병합 지원). |
-| **7. 기존 프로젝트 업데이트** | `refactor-analyze upgrade [--dry-run]` *(또는 `update`)* | `refactor:upgrade` | `rau` | 기존 분석 항목의 언어 설정과 분석 내용을 유지한 채 규칙과 누락된 템플릿을 최신 버전으로 업데이트. |
-| **8. 상태 및 점검** | `refactor-analyze status` / `check` / `doctor` | - | - | 진행 상태 확인 및 필수 파일 점검. |
+| **5. 0-Token 출처 및 드리프트 검증** | `refactor-analyze verify [번호]` | `refactor:verify [번호]` | `rav` | 로컬 0-Token으로 `#Lx-Ly` 소스 파일 및 라인 번호의 실재 여부를 검증하고 대상 시스템의 Git 커밋 변경에 따른 라인 이동을 감지. |
+| **6. 확정 커밋 및 동기화** | `refactor-analyze commit [번호]` | `refactor:commit [번호]` | `rac` | `verify` 통과 후 `project/index.md` 상태 갱신, 자동 Git 커밋 및 안전한 원격 sync 실행(충돌 발생 시 파일 손상 없이 안전하게 중지). |
+| **7. PDF 내보내기** | `refactor-analyze pdf [대상] [--merge] [--output ...]` *(또는 `md2pdf`)* | `refactor:pdf [대상]` | `rap` | **0-Token 로컬 변환**: 지정한 `.md` 파일, 번호 폴더(예: `001`) 또는 `project/` 전체를 `.pdf`로 변환(`--merge`로 단일 PDF 병합 지원). |
+| **8. 기존 프로젝트 업데이트** | `refactor-analyze upgrade [--dry-run]` *(또는 `update`)* | `refactor:upgrade` | `rau` | 기존 분석 항목의 언어 설정과 분석 내용을 유지한 채 규칙과 누락된 템플릿을 최신 버전으로 업데이트. |
+| **9. 상태 및 점검** | `refactor-analyze status` / `check` / `doctor` | - | - | 진행 상태 확인 및 필수 파일 점검. |

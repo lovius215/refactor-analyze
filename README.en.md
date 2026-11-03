@@ -66,10 +66,11 @@ All scripts automatically verify that `npm` and `node` are installed before exec
 | **2. Scan Database Schema** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | Connects to DB via `project/system/db-connection.md` (with SSH Jump Host support) in read-only mode to scan all tables, columns, and triggers into `db-schema.md` & `db/<table>.md`. |
 | **3. Analyze by ID** | `refactor-analyze analyze <ID>` | `refactor:analyze <ID>` | `raa` | Creates `project/<ID>/` folder; analyzes business logic, data flow, SQL, dependencies, dead code, complexity, and **auto-generates `backlog.md`**. |
 | **4. Reanalyze by ID** | `refactor-analyze reanalyze <ID>` | `refactor:reanalyze <ID>` | `rar` | Reads user clarifications in `project/<ID>/backlog.md` and latest target Git state to **reanalyze** and update all files in `project/<ID>/`. |
-| **5. Commit & Remote Sync** | `refactor-analyze commit [ID]` | `refactor:commit [ID]` | `rac` | Updates `project/index.md` status, creates local Git commit, syncs with remote, and assists with conflict resolution followed by commit & sync. |
-| **6. Export Markdown to PDF** | `refactor-analyze pdf [target] [--merge] [--output ...]` *(or `md2pdf`)* | `refactor:pdf [target]` | `rap` | Converts a `.md` file, a numbered folder (e.g., `001`), or the entire `project/` into `.pdf` (supports `--merge` into a single PDF). |
-| **7. Upgrade Workspace** | `refactor-analyze upgrade [--dry-run]` *(or `update`)* | `refactor:upgrade` | `rau` | Non-destructively updates `AGENTS.md`, `skills/`, `rules/`, and missing templates in an existing workspace while preserving language settings. |
-| **8. Status & Diagnostics** | `refactor-analyze status` / `check` / `doctor` | - | - | Displays analysis progress and verifies workspace file integrity. |
+| **5. 0-Token Citation & Drift Verify** | `refactor-analyze verify [ID]` | `refactor:verify [ID]` | `rav` | Local 0-Token check verifying that all cited `#Lx-Ly` files and line ranges exist in the target repo and detecting Git commit drift. |
+| **6. Commit & Safe Remote Sync** | `refactor-analyze commit [ID]` | `refactor:commit [ID]` | `rac` | Runs `verify` first, updates `project/index.md` status, creates local Git commit, and safely syncs with remote (stopping safely on merge conflicts for semantic resolution). |
+| **7. Export Markdown to PDF** | `refactor-analyze pdf [target] [--merge] [--output ...]` *(or `md2pdf`)* | `refactor:pdf [target]` | `rap` | **0-Token Local PDF Export**: Converts a `.md` file, a numbered folder (e.g., `001`), or the entire `project/` into `.pdf` (supports `--merge` into a single PDF). |
+| **8. Upgrade Workspace** | `refactor-analyze upgrade [--dry-run]` *(or `update`)* | `refactor:upgrade` | `rau` | Non-destructively updates `AGENTS.md`, `skills/`, `rules/`, and missing templates in an existing workspace while preserving language settings. |
+| **9. Status & Diagnostics** | `refactor-analyze status` / `check` / `doctor` | - | - | Displays analysis progress and verifies workspace file integrity. |
 
 ---
 

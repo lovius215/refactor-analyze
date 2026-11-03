@@ -22,10 +22,11 @@ description: 用 init、scandb、analyze <編號>、reanalyze <編號>、commit 
 | AI 指令 | 簡寫 | 對應 CLI 指令 | 用途與動作 |
 |---|---|---|---|
 | `refactor:init [路徑]` | `rai` | `refactor-analyze init` | **初始化與產出系統大概**：確認語言（`zh-TW`/`zh-CN`/`en`/`ja`/`ko`）、詢問目標系統路徑、檢查工作區與目標系統 Git 狀態並**詢問是否需要向 remote 對齊**，接著產出 `project/system/` 與分類編號清單 `project/index.md`。 |
-| `refactor:scandb` | `ras` | `refactor-analyze scandb` | **連結資料庫掃描欄位**：依據 `project/system/db-connection.md`（含跳板機 SSH Tunnel）實際以唯讀方式連線資料庫，抓取所有 Table、欄位、PK/FK、註解、View、Stored Procedure 與 Trigger，產出 `project/system/db-schema.md` 與 `project/system/db/<table>.md`。 |
+| `refactor:scandb` | `ras` | `refactor-analyze scandb` | **連結資料庫掃描欄位**：呼叫本機 CLI `refactor-analyze scandb` 讀取 `project/system/db-connection.md`（**AI 嚴禁讀取或輸出密碼至對話框**），支援 SQLite、MySQL/MariaDB、PostgreSQL、SQL Server (`sqlcmd`)、Oracle (`sqlplus`) 與獨立 SSH ControlMaster 跳板機通道，強制以**唯讀 Session** 抓取所有 Table、欄位、PK/FK、Index、註解、View、Stored Procedure 與 Trigger，產出 `project/system/db-schema.md` 與 `project/system/db/<table>.md`。 |
 | `refactor:analyze <編號>` | `raa` | `refactor-analyze analyze <編號>` | **依編號分析業務邏輯**：依 `project/index.md` 的編號新建 `project/<編號>/` 資料夾，從進入點深入分析並產出 `analysis.md`、`business-logic.md`、`data-flow.md`、`sql.md`、`dependencies.md`、`dead-code.md`，並**自動產出 `backlog.md`**。 |
 | `refactor:reanalyze <編號>` | `rar` | `refactor-analyze reanalyze <編號>` | **重新分析單一編號**：讀取 `project/<編號>/backlog.md` 補充內容與目標系統最新 Git 版本/程式碼，**再分析一次**並更新 `project/<編號>/` 內所有文件。 |
-| `refactor:commit [編號]` | `rac` | `refactor-analyze commit [編號]` | **確認歸檔與 Git 同步**：確認後更新 `project/index.md` 狀態與複雜度、匯總至 `domain-flows.md` 與 `system/dead-code.md`、自動建立 Git commit；若有 remote 則自動 sync，**遇到衝突主動協助處理，處理後再自動 commit 與 sync**。 |
+| `refactor:verify [編號]` | `rav` | `refactor-analyze verify [編號]` | **0-Token 驗證來源與版本飄移**：驗證 `project/<編號>/` 內所有 `` `<file>#L<start>-L<end>` `` 原始碼檔案與行號是否真實存在，並檢查目標系統 Git Commit 是否改版導致行號偏移。 |
+| `refactor:commit [編號]` | `rac` | `refactor-analyze commit [編號]` | **確認歸檔與 Git 同步**：先執行 `verify` 確認無幻覺引用，再更新 `project/index.md` 狀態與複雜度、匯總至 `domain-flows.md` 與 `system/dead-code.md`、自動建立 Git commit；若有 remote 則自動 sync，**CLI 遇衝突時安全停止不破壞檔案，由 AI (`rac`) 進行語意合併後再 commit 與 sync**。 |
 | `refactor:pdf [目標]` | `rap` | `refactor-analyze pdf [目標]` *(或 `md2pdf`)* | **匯出 PDF**：將單一 `.md`、編號資料夾（如 `001`）或整個 `project/` 轉為 `.pdf`（支援 `--merge` 合併單一 PDF 與 `--output` 指定路徑）。 |
 | `refactor:upgrade` | `rau` | `refactor-analyze upgrade` | **更新現有分析項目**：保留既有語言與分析內容，同步更新最新規則與補齊缺失文件模板。 |
 

@@ -8,11 +8,11 @@
 
 <p align="center">
   <b>🌐 Languages / 語言選擇:</b>
-  <a href="./README.en.md"><b>English</b></a> |
-  <a href="./README.zh-TW.md"><b>繁體中文</b></a> |
-  <a href="./README.zh-CN.md"><b>简体中文</b></a> |
-  <a href="./README.ja.md"><b>日本語</b></a> |
-  <a href="./README.ko.md"><b>한국어</b></a>
+  <a href="https://github.com/lovius215/refactor-analyze/blob/main/README.en.md"><b>English</b></a> |
+  <a href="https://github.com/lovius215/refactor-analyze/blob/main/README.zh-TW.md"><b>繁體中文</b></a> |
+  <a href="https://github.com/lovius215/refactor-analyze/blob/main/README.zh-CN.md"><b>简体中文</b></a> |
+  <a href="https://github.com/lovius215/refactor-analyze/blob/main/README.ja.md"><b>日本語</b></a> |
+  <a href="https://github.com/lovius215/refactor-analyze/blob/main/README.ko.md"><b>한국어</b></a>
 </p>
 
 ---
@@ -30,16 +30,17 @@ mkdir my-legacy-analysis && cd my-legacy-analysis
 refactor-analyze init --full
 ```
 
-**🤖 Core AI Workflow in Chat (Gemini / Claude / GPT / Cursor / Antigravity):**
-- `refactor:init [路徑]` (`rai`) $\to$ 鎖定語言、詢問目標系統路徑與是否向 Git remote 對齊，產出**系統大概**（`project/system/`）與**分類編號清單**（`project/index.md`）
-- `refactor:scandb` (`ras`) $\to$ 依據 `db-connection.md`（支援 SSH 跳板機）實際連進資料庫抓取所有 Table、欄位、註解與 Trigger
-- `refactor:analyze <編號>` (`raa`) $\to$ 新建以**編號**命名的資料夾（`project/001/`），產出分析、業務邏輯、資料流、SQL、依賴關係、死程式碼，並**自動產出 `backlog.md`**
-- `refactor:reanalyze <編號>` (`rar`) $\to$ 在 `backlog.md` 補充未知欄位或業務邏輯後，**再分析一次**並同步更新文件
-- `refactor:commit [編號]` (`rac`) $\to$ 確認後更新 `project/index.md` 狀態、自動 Git commit、若有 remote 自動 sync（**遇到衝突自動協助處理後再 commit 與 sync**）
-- `refactor:pdf [目標]` (`rap`) $\to$ 將單一 `.md`、編號資料夾（如 `001`）或整個 `project/` 轉換為 `.pdf`（CLI: `refactor-analyze pdf` 或 `md2pdf`，支援 `--merge` 與 `--output`）
-- `refactor:upgrade` (`rau`) $\to$ 更新現有分析項目的規則與缺失模板（CLI: `refactor-analyze upgrade` 或 `update`）
+**🤖 Core AI & CLI Workflow (Gemini / Claude / GPT / Cursor / Antigravity):**
+- `refactor:init [路徑]` (`rai`) → 鎖定語言、詢問目標系統路徑與是否向 Git remote 對齊，產出**系統大概**（`project/system/`）與**分類編號清單**（`project/index.md`）
+- `refactor:scandb` (`ras` / CLI `refactor-analyze scandb`) → 依據 `db-connection.md`（支援 SQLite、MySQL/MariaDB、PostgreSQL、SQL Server `sqlcmd`、Oracle `sqlplus` 與 SSH 跳板機，**帳密不進 AI 對話框**）以**強制唯讀 Session** 抓取所有 Table、欄位、PK/FK、Index、註解、View、SP 與 Trigger
+- `refactor:analyze <編號>` (`raa`) → 新建以**編號**命名的資料夾（`project/001/`），產出分析、業務邏輯、資料流、SQL、依賴關係、死程式碼，並**自動產出 `backlog.md`**
+- `refactor:reanalyze <編號>` (`rar`) → 在 `backlog.md` 補充未知欄位或業務邏輯後，**再分析一次**並同步更新文件
+- `refactor:verify [編號]` (`rav` / CLI `refactor-analyze verify`) → **0-Token 防幻覺與版本飄移驗證**：自動核對 `#Lx-Ly` 原始碼檔案與行號是否真實存在，並比對 Git Commit Hash 偵測目標系統是否已改版導致行號偏移
+- `refactor:commit [編號]` (`rac`) → 通過 `verify` 後更新 `project/index.md` 狀態、自動 Git commit、若有 remote 自動安全 sync（**CLI 遇衝突時安全停止不破壞檔案，交由 AI `rac` 進行語意合併**）
+- `refactor:pdf [目標]` (`rap`) → **0-Token 本機轉 PDF**：將單一 `.md`、編號資料夾（如 `001`）或整個 `project/` 轉換為 `.pdf`（CLI: `refactor-analyze pdf` 或 `md2pdf`，支援 `--merge` 與 `--output`）
+- `refactor:upgrade` (`rau`) → 更新現有分析項目的規則與缺失模板（CLI: `refactor-analyze upgrade` 或 `update`）
 
-👉 **Language Guides: [English](./README.en.md) | [繁體中文](./README.zh-TW.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md)**
+👉 **Language Guides: [English](https://github.com/lovius215/refactor-analyze/blob/main/README.en.md) | [繁體中文](https://github.com/lovius215/refactor-analyze/blob/main/README.zh-TW.md) | [简体中文](https://github.com/lovius215/refactor-analyze/blob/main/README.zh-CN.md) | [日本語](https://github.com/lovius215/refactor-analyze/blob/main/README.ja.md) | [한국어](https://github.com/lovius215/refactor-analyze/blob/main/README.ko.md)**
 
 ---
 
@@ -111,25 +112,40 @@ scripts\uninstall.bat
 | **2. 掃描資料庫欄位** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | 依據 `project/system/db-connection.md`（支援跳板機）實際連進資料庫 Scan 所有 Table、欄位、關聯、View、Stored Procedure 與 Trigger，產出 `db-schema.md` 與 `db/<table>.md`。 |
 | **3. 分析單一編號** | `refactor-analyze analyze <編號>` | `refactor:analyze <編號>` | `raa` | 新建 `project/<編號>/` 資料夾，深入分析業務邏輯、資料流、SQL、依賴關係、死程式碼、複雜度與重構建議，並**自動產出 `backlog.md`**。 |
 | **4. 重新分析單一編號** | `refactor-analyze reanalyze <編號>` | `refactor:reanalyze <編號>` | `rar` | 根據 `backlog.md` 補充內容或程式碼/DB 變更**再分析一次**，更新 `project/<編號>/` 內所有文件與分析時間、Git 版本。 |
-| **5. 確認提交與遠端同步** | `refactor-analyze commit [編號]` | `refactor:commit [編號]` | `rac` | 確認後更新 `project/index.md` 狀態、自動 commit 到 Git；若有 remote 自動 sync，遇到衝突會協助處理，處理後再協助 commit 與 sync。 |
-| **6. 匯出 PDF 文件** | `refactor-analyze pdf [目標] [--merge] [--output ...]` *(或 `md2pdf`)* | `refactor:pdf [目標]` | `rap` | 將指定的 `.md` 檔案、編號資料夾（如 `001`）或整個 `project/` 轉換為 `.pdf`（支援 `--merge` 合併為單一 PDF）。 |
-| **7. 更新現有分析項目** | `refactor-analyze upgrade [--dry-run]` *(或 `update`)* | `refactor:upgrade` | `rau` | 將現有分析項目的 `AGENTS.md`、`skills/`、`rules/` 與缺失文件模板更新至最新版本（保留既有語言與分析內容）。 |
-| **8. 狀態與健康檢查** | `refactor-analyze status` / `check` / `doctor` | - | - | 查看清單完成進度、檢查必要檔案是否齊全。 |
+| **5. 0-Token 驗證來源與飄移** | `refactor-analyze verify [編號]` | `refactor:verify [編號]` | `rav` | 本機 0-Token 核對所有 `#Lx-Ly` 原始碼檔案與行號是否真實存在，並比對 Git Commit Hash 偵測目標系統改版飄移。 |
+| **6. 確認提交與遠端同步** | `refactor-analyze commit [編號]` | `refactor:commit [編號]` | `rac` | 通過 `verify` 後更新 `project/index.md` 狀態、自動 commit 到 Git；若有 remote 自動安全 sync（CLI 遇衝突安全停止不破壞檔案，交由 AI `rac` 語意合併）。 |
+| **7. 匯出 PDF 文件** | `refactor-analyze pdf [目標] [--merge] [--output ...]` *(或 `md2pdf`)* | `refactor:pdf [目標]` | `rap` | **0-Token 本機轉換**：將指定的 `.md` 檔案、編號資料夾（如 `001`）或整個 `project/` 轉換為 `.pdf`（支援 `--merge` 合併為單一 PDF）。 |
+| **8. 更新現有分析項目** | `refactor-analyze upgrade [--dry-run]` *(或 `update`)* | `refactor:upgrade` | `rau` | 將現有分析項目的 `AGENTS.md`、`skills/`、`rules/` 與缺失文件模板更新至最新版本（保留既有語言與分析內容）。 |
+| **9. 狀態與健康檢查** | `refactor-analyze status` / `check` / `doctor` | - | - | 查看清單完成進度、檢查必要檔案是否齊全。 |
 
 ---
 
 ## 完整使用流程
 
-```mermaid
-flowchart TD
-    A["1. 終端機初始化工作區<br/>refactor-analyze init --full"] --> B["2. AI 對話啟動與對齊<br/>輸入 refactor:init (rai) [目標系統路徑]<br/>確認語言、詢問是否向 Git remote 對齊"]
-    B --> C["產出系統大概 (project/system/)<br/>與分類編號清單 (project/index.md)<br/>同類放一起、無法歸類放其他"]
-    C --> D["3. 填寫 db-connection.md 並執行 scandb (ras)<br/>支援 SSH 跳板機唯讀抓取所有 Table 欄位与 Trigger"]
-    D --> E["4. 依編號分析業務邏輯<br/>執行 analyze 001 (raa 001)<br/>新建 project/001/ 產出 7 份文件並自動產出 backlog.md"]
-    E --> F{"Backlog 是否有待補充項目？"}
-    F -- "在 backlog.md 補充說明" --> G["5. 執行 reanalyze 001 (rar 001)<br/>結合補充內容再分析一次並更新文件"]
-    G --> F
-    F -- "確認無誤" --> H["6. 執行 commit 001 (rac 001)<br/>更新 index.md 狀態 -> 自動 Git commit -> 自動 remote sync<br/>遇衝突主動協助處理後再 commit 與 sync"]
+```text
+1. 終端機初始化工作區
+   refactor-analyze init --full
+         │
+         ▼
+2. AI 對話啟動與 Git 對齊 (輸入 refactor:init [目標系統路徑] 或 rai)
+   - 鎖定專案語言 (zh-TW / zh-CN / en / ja / ko)，詢問是否向 Git remote 對齊
+   - 產出系統大概 (project/system/，判定 APP / 桌面應用程式 / 網頁 + 涵蓋說明)
+   - 產出分類編號清單 (project/index.md：同分類放一起、無法歸類放「其他」)
+         │
+         ▼
+3. 填寫 db-connection.md 並執行 refactor-analyze scandb (或 ras)
+   - 支援 SQLite / MySQL / MariaDB / PostgreSQL / SQL Server (sqlcmd) / Oracle (sqlplus) 與 SSH 跳板機
+   - 強制唯讀 Session 抓取所有 Table、欄位、PK/FK、Index、註解、View、SP 與 Trigger (帳密不進 AI Context)
+         │
+         ▼
+4. 依編號分析業務邏輯 (執行 refactor-analyze analyze 001 + AI 輸入 raa 001)
+   - 新建 project/001/ 產出 7 份核心文件，所有邏輯必附原始碼檔案與行號 (#Lx-Ly)，並自動產出 backlog.md
+         │
+         ├──► [若有待補充項目] 於 backlog.md 補充說明 ──► 5. 執行 rar 001 再分析一次並更新文件
+         ▼
+6. 執行 0-Token 驗證與確認歸檔 (refactor-analyze verify 001 -> refactor-analyze commit 001 / rac 001)
+   - 自動核對 #Lx-Ly 檔案與行號真實性、偵測目標系統 Git 版本飄移
+   - 更新 index.md 狀態 -> 自動本機 Git commit -> 自動安全 remote sync
 ```
 
 ### 步驟 1：初始化獨立工作區

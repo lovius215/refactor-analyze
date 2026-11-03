@@ -1,7 +1,9 @@
 # 資料庫與跳板機連線設定檔 (Database & SSH Jump Host Configuration)
 
-> ⚠️ **資安保護提醒**：本檔案包含敏感帳號密碼，已自動加入 `.gitignore`，執行 `commit` 時絕不會被提交或推送至遠端 Git。
-> 填寫完畢後，請執行 `refactor-analyze scandb`（或在 AI 對話輸入 `refactor:scandb` / `ras`）以唯讀方式實際抓取所有資料表與欄位。
+> ⚠️ **資安與唯讀保護提醒**：
+> 1. 本檔案包含敏感帳號密碼，已自動加入 `.gitignore`，執行 `commit` 時絕不會被提交或推送至遠端 Git。
+> 2. **強烈建議填寫僅具 `SELECT` 權限的「唯讀資料庫帳號 (Read-Only Account)」**；CLI 執行 `scandb` 時亦會強制啟用唯讀交易模式，且**嚴禁將帳密貼入 AI 對話框**。
+> 3. 填寫完畢後，請在終端機執行 `refactor-analyze scandb` 以唯讀方式實際抓取所有資料表、欄位、PK/FK、Index、註解、View、Stored Procedure 與 Trigger。
 
 ## 1. 資料庫基本連線資訊
 

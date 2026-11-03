@@ -17,6 +17,9 @@
   2. **縮寫或語意不明的資料表/API 欄位**：例如 `USR_LVL_TP`、`EXT_ATTR_2` 在資料庫無 Comment 且程式碼無明確說明時，一律列入 `backlog.md`。
   3. **外部系統 API 或缺少的 Stored Procedure**：當程式碼呼叫外部 HTTP URL、MQ Topic 或 DB Stored Procedure，但本專案與 DB 中找不到其內部邏輯時，僅記錄呼叫參數與回傳處理，並將未知內部行為列入 `backlog.md`。
 
-## 3. 原文忠實性
+## 3. 原文忠實性與 CLI 0-Token 自動驗證 (`verify`)
 
 - 在 `sql.md` 記錄的 SQL 語句與在 `dead-code.md` 記錄的死程式碼片段，必須忠實反映目標系統在該 Git 分支與 Commit Hash 下的真實代碼，不得擅自改寫、美化或省略關鍵條件。
+- **0-Token 實體檔案與行號核驗（`refactor-analyze verify [編號]`）**：
+  - 分析完成後或執行 `commit` 前，CLI 會自動掃描 `project/<編號>/` 內所有 `` `<file>#L<start>-L<end>` `` 引用，直接核對目標系統實體檔案是否存在、行號是否超出實際檔案總行數，並檢查目標系統 Git Commit 是否已改版導致行號飄移（Drift Detection）。
+  - 凡未通過 `verify` 檢查（缺少來源引用、引用了不存在的幻覺路徑或超出檔案行數）之編號，CLI 將拒絕標記為 `已完成`。

@@ -64,7 +64,8 @@
 | **2. DB カラムスキャン** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | `db-connection.md`（踏み台対応）に基づき DB から全テーブル・カラム・Trigger を取得し、`db-schema.md` と `db/<table>.md` を生成。 |
 | **3. 番号別詳細分析** | `refactor-analyze analyze <番号>` | `refactor:analyze <番号>` | `raa` | `project/<番号>/` フォルダを作成し、業務ロジック、データフロー、SQL、依存関係、デッドコード、複雑度を分析し **`backlog.md` を自動生成**。 |
 | **4. 番号別再分析** | `refactor-analyze reanalyze <番号>` | `refactor:reanalyze <番号>` | `rar` | `backlog.md` の追記内容やコード更新を元に**再分析**し、`project/<番号>/` 内の全ファイルを更新。 |
-| **5. 確定コミット＆同期** | `refactor-analyze commit [番号]` | `refactor:commit [番号]` | `rac` | 確認後に `project/index.md` の状態を更新し、Git コミットとリモート同期（競合解決支援を含む）を自動実行。 |
-| **6. PDF エクスポート** | `refactor-analyze pdf [対象] [--merge] [--output ...]` *(または `md2pdf`)* | `refactor:pdf [対象]` | `rap` | 指定の `.md` ファイル、番号フォルダ（例: `001`）、または `project/` 全体を `.pdf` に変換（`--merge` で単一 PDF へ結合可能）。 |
-| **7. 既存プロジェクト更新** | `refactor-analyze upgrade [--dry-run]` *(または `update`)* | `refactor:upgrade` | `rau` | 既存の分析ワークスペースの言語設定と分析内容を維持したまま、ルールと不足テンプレートを最新版に更新。 |
-| **8. 状態確認** | `refactor-analyze status` / `check` / `doctor` | - | - | 分析進捗や必須ファイルの整合性をチェック。 |
+| **5. 0-Token 根拠＆ドリフト検証** | `refactor-analyze verify [番号]` | `refactor:verify [番号]` | `rav` | ローカル 0-Token で `#Lx-Ly` のファイルと行番号の実在性を検証し、対象システムの Git コミット変更による行番号ずれを検出。 |
+| **6. 確定コミット＆同期** | `refactor-analyze commit [番号]` | `refactor:commit [番号]` | `rac` | `verify` 通過後に `project/index.md` の状態を更新し、Git コミットと安全なリモート同期を実行（競合時はファイルを破壊せず安全に停止）。 |
+| **7. PDF エクスポート** | `refactor-analyze pdf [対象] [--merge] [--output ...]` *(または `md2pdf`)* | `refactor:pdf [対象]` | `rap` | **0-Token ローカル変換**：指定の `.md` ファイル、番号フォルダ（例: `001`）、または `project/` 全体を `.pdf` に変換（`--merge` で単一 PDF へ結合可能）。 |
+| **8. 既存プロジェクト更新** | `refactor-analyze upgrade [--dry-run]` *(または `update`)* | `refactor:upgrade` | `rau` | 既存の分析ワークスペースの言語設定と分析内容を維持したまま、ルールと不足テンプレートを最新版に更新。 |
+| **9. 状態確認** | `refactor-analyze status` / `check` / `doctor` | - | - | 分析進捗や必須ファイルの整合性をチェック。 |
