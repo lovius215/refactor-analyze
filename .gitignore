@@ -1,4 +1,4 @@
 node_modules/
 .DS_Store
 *.log
-project/system/db-connection.md
+/project/system/db-connection.md

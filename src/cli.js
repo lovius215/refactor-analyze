@@ -183,7 +183,10 @@ function ensureGitIgnore() {
   const requiredEntry = "project/system/db-connection.md";
 
   if (!fs.existsSync(gitignorePath)) {
-    const content = readTemplate(".gitignore");
+    const tplName = fs.existsSync(path.join(templatesDir, "gitignore.template"))
+      ? "gitignore.template"
+      : ".gitignore";
+    const content = readTemplate(tplName);
     writeFileIfMissing(gitignorePath, content);
     return { action: "create", target: ".gitignore" };
   }

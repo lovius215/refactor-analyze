@@ -1,0 +1,51 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          scope: '@loviusc'
+
+      - name: Verify npm token presence
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "❌ ERROR: NODE_AUTH_TOKEN is empty! 請確認 GitHub 專案 Settings -> Secrets and variables -> Actions 的 Repository secrets 中是否存在名為 NPM_TOKEN 的 Secret。"
+            exit 1
+          else
+            echo "✅ NPM_TOKEN 已讀取到（長度: ${#NODE_AUTH_TOKEN} 字元）"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Configure .npmrc
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify npm authentication
+        run: |
+          echo "正在驗證 npm 登入身份..."
+          npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - run: npm ci
+      - run: npm run check
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
