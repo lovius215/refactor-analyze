@@ -35,3 +35,25 @@
   4. **SQL 業務邏輯解析**（說明 `JOIN` 關聯、`WHERE` 過濾條件、`CASE WHEN` 與聚合計算代表之業務規則）。
   5. **SQL 效能與重構建議**（如是否使用 `SELECT *`、索引缺失風險、子查詢拆分建議）。
 - 若該功能完全不涉及資料庫查詢，則在 `sql.md` 明確標示「無 SQL 操作」。
+
+## 5. 畫面操作行為與前後端驗證專檔整理（`project/<編號>/ui-behavior.md`）
+
+- 舊系統常將大量欄位連動、預設值邏輯與輸入驗證寫在前端畫面（如 JSP / Vue / React / Angular / WinForms / WPF / Mobile 畫面事件）中，甚至出現「只有前端畫面驗證、後端 API 未驗證」的現象。
+- 必須在 `project/<編號>/ui-behavior.md` 完整盤點並記錄（每一項皆須標註對應的前端/畫面檔案路徑與行號範圍 `` `<file>#L<start>-L<end>` ``）：
+  1. **畫面欄位屬性與動態連動**：記錄欄位型態、預設值，以及**動態顯隱、唯讀（ReadOnly）、禁用（Disabled）與動態必填條件**。
+  2. **下拉選單與選項控制項資料來源明細（`DropDownList` / `Select` / `ComboBox` / `Radio` Data Sources）**：凡是選項資料來源取自資料庫（無論是後端直連 DB 綁定、透過 API 查 DB、或查詢共用代碼表 Code Table），**必須明確寫出**：
+     - 對應的資料庫 Table 名稱（對照 `project/system/db/<table>.md`）或 API 路徑。
+     - 實際綁定的值欄位（`Value` / `DataValueField`）與畫面顯示文字欄位（`Text` / `DataTextField`）。
+     - 查詢過濾條件（`WHERE`，例如是否只撈啟用狀態 `STATUS = '1'`、是否依登入者權限過濾、編輯舊資料時停用選項如何回顯）、排序規則（`ORDER BY`）與預設首項（如「請選擇 `""`」或「全部 `ALL`」）。
+     - 級聯連動關係（Cascading DropDownList：上層父下拉選單變更時如何帶入參數重查下層選單並清空原值），且**相關查詢 SQL 必須同步收錄於 `sql.md`**。
+  3. **畫面操作行為與事件觸發流程**：記錄頁面初始化（`onLoad` / `onMount`）、按鈕點擊（`onClick`）、欄位變更（`onChange` / `onBlur`）即時計算公式、確認彈窗、防連點機制與操作後跳轉動線。
+  4. **畫面與後端驗證規則對照矩陣（Validation Matrix）**：逐一列出單欄位驗證（必填、長度、型態、Regex、數值範圍）與跨欄位連動驗證，並**明確標註驗證實作層級（`僅前端 UI` / `僅後端 API` / `前後端皆有`）及前後端規則是否一致**。
+  5. **畫面元件級權限與資料遮罩**：記錄按鈕/頁籤的角色權限顯隱控管與敏感欄位遮罩格式。
+- 若該編號為純後端 API 或背景批次作業（Batch Job）且無對應畫面，則在 `ui-behavior.md` 第一節明確標示「`無畫面操作（純後端 API / 批次作業）`」。
+
+## 6. 隱性依賴、報表檔案映射、交易鎖定與驗收情境
+
+1. **隱性上下文依賴盤點（`analysis.md`）**：舊系統常偷讀 `Session`、`HttpContext`、`ThreadLocal` 或全域變數，必須在 `analysis.md` 明確列出並提供現代無狀態 API 的傳入建議。
+2. **報表匯出與檔案匯入映射（`data-flow.md`）**：涉及 Excel、CSV、定長電文檔或報表套印時，必須在 `data-flow.md` 記錄範本檔路徑、編碼與欄位對照清單。
+3. **交易邊界與併發控制（`business-logic.md`）**：必須記錄 `@Transactional` 涵蓋範圍、資料庫鎖定機制（樂觀鎖/悲觀鎖）與回滾補償行為。
+4. **重構驗收測試情境（`business-logic.md`）**：強制以 Given / When / Then 格式提供正向與邊界驗收條件，作為重構後自動化測試的黃金依據。

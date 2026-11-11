@@ -62,10 +62,83 @@
 |---|---|---|---|---|
 | **1. 초기화 및 시스템 개요** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [경로]` | `rai` | 워크스페이스 및 Git 생성, 언어 확정, 대상 경로 및 원격 정렬 여부 확인, `project/system/` 및 번호 목록 `project/index.md` 산출. |
 | **2. DB 컬럼 스캔** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | `db-connection.md`(점프 호스트 지원)를 기반으로 실제 DB에서 모든 테이블/컬럼/Trigger를 스캔하여 `db-schema.md` 및 `db/<table>.md` 생성. |
-| **3. 번호별 심층 분석** | `refactor-analyze analyze <번호>` | `refactor:analyze <번호>` | `raa` | `project/<번호>/` 폴더를 생성하고 비즈니스 로직, 데이터 흐름, SQL, 의존성, 데드코드, 복잡도를 분석하며 **`backlog.md` 자동 생성**. |
+| **3. 번호별 심층 분석** | `refactor-analyze analyze <번호>` | `refactor:analyze <번호>` | `raa` | `project/<번호>/` 폴더를 생성하고 비즈니스 로직, **화면 조작 동작 및 유효성 검증(`ui-behavior.md`)**, 데이터 흐름, SQL, 의존성, 데드코드, 복잡도를 분석하며 **`backlog.md` 자동 생성**. |
 | **4. 번호별 재분석** | `refactor-analyze reanalyze <번호>` | `refactor:reanalyze <번호>` | `rar` | `backlog.md`에 보충된 설명이나 코드 변경을 반영하여 **재분석**하고 `project/<번호>/` 내 모든 문서 갱신. |
 | **5. 0-Token 출처 및 드리프트 검증** | `refactor-analyze verify [번호]` | `refactor:verify [번호]` | `rav` | 로컬 0-Token으로 `#Lx-Ly` 소스 파일 및 라인 번호의 실재 여부를 검증하고 대상 시스템의 Git 커밋 변경에 따른 라인 이동을 감지. |
 | **6. 확정 커밋 및 동기화** | `refactor-analyze commit [번호]` | `refactor:commit [번호]` | `rac` | `verify` 통과 후 `project/index.md` 상태 갱신, 자동 Git 커밋 및 안전한 원격 sync 실행(충돌 발생 시 파일 손상 없이 안전하게 중지). |
 | **7. PDF 내보내기** | `refactor-analyze pdf [대상] [--merge] [--output ...]` *(또는 `md2pdf`)* | `refactor:pdf [대상]` | `rap` | **0-Token 로컬 변환**: 지정한 `.md` 파일, 번호 폴더(예: `001`) 또는 `project/` 전체를 `.pdf`로 변환(`--merge`로 단일 PDF 병합 지원). |
 | **8. 기존 프로젝트 업데이트** | `refactor-analyze upgrade [--dry-run]` *(또는 `update`)* | `refactor:upgrade` | `rau` | 기존 분석 항목의 언어 설정과 분석 내용을 유지한 채 규칙과 누락된 템플릿을 최신 버전으로 업데이트. |
 | **9. 상태 및 점검** | `refactor-analyze status` / `check` / `doctor` | - | - | 진행 상태 확인 및 필수 파일 점검. |
+
+---
+
+## 💡 실전 사용 예시: 레거시 주문 시스템 리버스 엔지니어링 (Example Walkthrough)
+
+다음은 10년 된 Java/Spring/JSP 주문 시스템(`legacy-shop`)을 표준 리팩토링 문서로 역공학 분석하는 실전 예시입니다:
+
+### Step 1. 독립 분석 워크스페이스 생성
+```bash
+mkdir shop-refactor-workspace && cd shop-refactor-workspace
+refactor-analyze init --full --lang ko
+```
+
+### Step 2. AI를 통한 시스템 전체 파악 (`rai`)
+AI 에이전트(Gemini / Claude / Cursor / Antigravity) 대화창에 입력:
+```text
+rai /Users/dev/projects/legacy-shop
+```
+AI가 대상 시스템의 Git 브랜치와 버전을 확인하고 다음을 생성합니다:
+- `project/system/overview.md`: **웹 시스템 (Web)** (Spring MVC + MyBatis + JSP + MySQL) 판정.
+- `project/index.md`: 업무 분류별 기능/API 목록:
+  ```markdown
+  ## 분류: 주문 관리 (Order Management)
+  | 번호 | 기능 또는 API | 프로그램 위치 (진입점) | 복잡도 | 현재 상태 |
+  |---|---|---|---|---|
+  | `001` | 체크아웃 및 주문 생성 | `src/controller/OrderController.java#createOrder` | 고 | 대기 |
+  | `002` | 주문 상세 및 상태 조회 | `src/controller/OrderController.java#getOrderDetail` | 저 | 대기 |
+  ```
+
+### Step 3. 실제 데이터베이스 및 코드 테이블 읽기 전용 스캔 (`ras`)
+`project/system/db-connection.md`(`.gitignore` 보호)에 접속 정보와 코드 테이블(`Code Tables: SYS_CODE`)을 설정하고 실행:
+```bash
+refactor-analyze scandb
+```
+출력:
+- `project/system/db/orders.md`, `order_items.md`: 컬럼 타입, PK/FK, 인덱스, 주석.
+- `project/system/db/_routines.md`: 저장 프로시저 `SP_CALC_DISCOUNT`의 전체 SQL 소스.
+- `project/system/code-dictionary.md`: `SYS_CODE` 사전 값(`01=임시저장, 02=결제완료, 03=출고완료`).
+
+### Step 4. 번호 001 비즈니스 로직 심층 분석 (`raa 001`)
+```bash
+refactor-analyze analyze 001
+# 또는 AI 대화창에 입력:
+raa 001
+```
+AI가 `project/001/` 디렉터리에 환각 없이 8개의 표준 문서를 생성합니다:
+1. **`analysis.md`**: 진입점 인자, 암시적 Session 의존성(`Session["CURRENT_DEPT_ID"]`), As-Is 현황 vs To-Be 리팩토링 제안(반복문 내 DB 조회의 N+1 기술 부채 식별).
+2. **`business-logic.md`**: 소스 라인 번호가 명시된 비즈니스 규칙(`OrderService.java#L85-L112`), 트랜잭션 범위, 인수 테스트 시나리오(Given/When/Then).
+3. **`ui-behavior.md`**: 드롭다운 데이터 출처, 화면 vs 백엔드 유효성 검증 매트릭스(화면에서 최대 99개를 제한하지만 서버 측에서 검증이 누락된 취약점 발견).
+4. **`data-flow.md`**: Request → Service → `orders` 테이블 쓰기 흐름.
+5. **`sql.md`**: `OrderMapper.xml`의 SQL문 및 동적 `<if>` 태그 분석.
+6. **`dependencies.md`**: 호출 체인 및 공통 모듈 참조.
+7. **`dead-code.md`**: 주석 처리된 이전 계산 로직.
+8. **`backlog.md`**: 코드 내 불분명한 매직 넘버(`FLG_03 = 'K'`) 자동 추출.
+
+### Step 5. 0-Token 출처 검증 및 드리프트 감지 (`rav 001`)
+```bash
+refactor-analyze verify 001
+```
+로컬에서 인용된 라인 번호의 실재 여부를 0 Token으로 검증하고 대상 코드의 변경 사항을 감지합니다.
+
+### Step 6. 확정 커밋, CRUD 자동 집계 및 원격 동기화 (`rac 001`)
+```bash
+refactor-analyze commit 001
+```
+- `orders` 테이블의 CRUD 작업을 `project/system/domain-flows.md`에 자동 집계.
+- `project/index.md` 상태를 `완료`로 업데이트하고 Git 커밋 및 원격 sync 실행.
+
+### Step 7. 원클릭 PDF 내보내기 (`rap 001`)
+```bash
+refactor-analyze pdf 001 --merge
+```
+표지, 목차, 코드 하이라이트가 포함된 단일 PDF(`project/001/001-merged.pdf`)를 로컬에서 즉시 렌더링!

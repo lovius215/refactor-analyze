@@ -27,6 +27,10 @@ function parseDbConnectionConfig(cwd) {
     database: extract(/(?:資料庫名稱|数据库名称|Database \/ Schema|データベース\/スキーマ|데이터베이스\/스키마)[^`]*`([^`]*)`/i),
     username: extract(/(?:^|\n)-\s*\*\*(?:帳號|账号|Username|ユーザー名|계정)(?:\s*\(Username\))?\*\*[：:]\s*`([^`]*)`/i),
     password: extract(/(?:^|\n)-\s*\*\*(?:密碼|密码|Password|パスワード|비밀번호)(?:\s*\(Password\))?\*\*[：:]\s*`([^`]*)`/i),
+    codeTables: extract(/(?:共用代碼表清單|共用代码表清单|Code Tables|コードテーブル|코드 테이블)[^`]*`([^`]*)`/i)
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => /^[a-zA-Z0-9_.]+$/.test(s)),
     sshEnabled:
       extract(/(?:啟用跳板機|启用跳板机|SSH Enabled|SSH 踏み台有効化|SSH 점프 호스트 활성화)[^`]*`([^`]*)`/i).toLowerCase() ===
       "true",
@@ -189,7 +193,7 @@ function scanSqlite(cwd, cfg, now) {
   };
 
   const masterRes = runSqlite(
-    "SELECT name, type, REPLACE(REPLACE(COALESCE(sql,''), CHAR(10), ' '), CHAR(13), ' ') FROM sqlite_master WHERE type IN ('table','view','trigger') AND name NOT LIKE 'sqlite_%' ORDER BY type, name;"
+    "SELECT name, type, tbl_name, REPLACE(REPLACE(COALESCE(sql,''), CHAR(10), '\\n'), CHAR(13), '') FROM sqlite_master WHERE type IN ('table','view','trigger') AND name NOT LIKE 'sqlite_%' ORDER BY type, name;"
   );
   if (masterRes.status !== 0) {
     fail(`無法執行 sqlite3 CLI: ${(masterRes.stderr || "").trim()}`);
@@ -201,11 +205,14 @@ function scanSqlite(cwd, cfg, now) {
     .map((l) => l.trim())
     .filter(Boolean);
   const tableSummaryRows = [];
+  const tableColsByName = new Map();
   const viewRows = [];
   const triggerRows = [];
 
   for (const row of rows) {
-    const [name, type, sqlDef] = row.split("\t");
+    const [name, type, tblName, rawSqlDef] = row.split("\t");
+    const fullSql = (rawSqlDef || "").replace(/\\n/g, "\n");
+    const oneLineSql = fullSql.replace(/\s+/g, " ").trim();
     if (type === "table") {
       const safeName = name.replace(/"/g, '""');
       const colRes = runSqlite(`PRAGMA table_info("${safeName}");`);
@@ -271,6 +278,7 @@ function scanSqlite(cwd, cfg, now) {
           };
         });
 
+      tableColsByName.set(name, cols.map((c) => c.name));
       writeTableMarkdown(cwd, name, cols, "", now, fkList, idxList);
       tableSummaryRows.push({
         name,
@@ -282,15 +290,48 @@ function scanSqlite(cwd, cfg, now) {
         comment: ""
       });
     } else if (type === "view") {
-      viewRows.push({ name, desc: (sqlDef || "").slice(0, 160) });
+      viewRows.push({ name, desc: oneLineSql.slice(0, 160), fullSql });
     } else if (type === "trigger") {
-      triggerRows.push({ name, table: "-", timing: "-", desc: (sqlDef || "").slice(0, 160) });
+      triggerRows.push({ name, table: tblName || "-", timing: "-", desc: oneLineSql.slice(0, 160), fullSql });
     }
   }
 
-  writeDbSchemaSummary(cwd, cfg.product, cfg.database || cfg.host, tableSummaryRows, viewRows, [], triggerRows, now);
+  const codeDictEntries = [];
+  if (cfg.codeTables && cfg.codeTables.length > 0) {
+    for (const ct of cfg.codeTables) {
+      const colNames = tableColsByName.get(ct);
+      if (!colNames || colNames.length === 0) continue;
+      const safeCt = ct.replace(/"/g, '""');
+      const dataRes = runSqlite(`SELECT * FROM "${safeCt}" LIMIT 1000;`);
+      if (dataRes.status === 0) {
+        const dataRows = (dataRes.stdout || "")
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => l.split("\t"));
+        codeDictEntries.push({ tableName: ct, columns: colNames, rows: dataRows });
+      }
+    }
+  }
+
+  writeRoutinesMarkdown(cwd, cfg.product, cfg.database || cfg.host, viewRows, [], triggerRows, now);
+  if (codeDictEntries.length > 0) {
+    writeCodeDictionaryMarkdown(cwd, codeDictEntries, now);
+  }
+  writeDbSchemaSummary(
+    cwd,
+    cfg.product,
+    cfg.database || cfg.host,
+    tableSummaryRows,
+    viewRows,
+    [],
+    triggerRows,
+    now,
+    codeDictEntries.length > 0
+  );
   console.log(
-    `[scandb] 已完成 SQLite 唯讀掃描：${tableSummaryRows.length} 張表、${viewRows.length} 個 View、${triggerRows.length} 個 Trigger。`
+    `[scandb] 已完成 SQLite 唯讀掃描：${tableSummaryRows.length} 張表、${viewRows.length} 個 View、${triggerRows.length} 個 Trigger${
+      codeDictEntries.length > 0 ? `、${codeDictEntries.length} 張共用代碼表字典` : ""
+    }。`
   );
 }
 
@@ -448,7 +489,8 @@ function scanMysql(cwd, cfg, host, port, now) {
       return { name, table, timing, desc: desc || "-" };
     });
 
-  writeDbSchemaSummary(cwd, cfg.product, cfg.database, summaryRows, views, procs, triggers, now);
+  writeRoutinesMarkdown(cwd, cfg.product, cfg.database, views, procs, triggers, now);
+  writeDbSchemaSummary(cwd, cfg.product, cfg.database, summaryRows, views, procs, triggers, now, false);
   console.log(
     `[scandb] 已完成 ${cfg.product} 唯讀掃描：${summaryRows.length} 張表、${views.length} 個 View、${procs.length} 個 SP/Function、${triggers.length} 個 Trigger。`
   );
@@ -619,7 +661,8 @@ function scanPostgres(cwd, cfg, host, port, now) {
       return { name, table, timing, desc: desc || "-" };
     });
 
-  writeDbSchemaSummary(cwd, "postgresql", cfg.database, summaryRows, views, procs, triggers, now);
+  writeRoutinesMarkdown(cwd, "postgresql", cfg.database, views, procs, triggers, now);
+  writeDbSchemaSummary(cwd, "postgresql", cfg.database, summaryRows, views, procs, triggers, now, false);
   console.log(
     `[scandb] 已完成 PostgreSQL 唯讀掃描：${summaryRows.length} 張表、${views.length} 個 View、${procs.length} 個 SP/Function、${triggers.length} 個 Trigger。`
   );
@@ -750,7 +793,8 @@ function scanMssql(cwd, cfg, host, port, now) {
       return { name, table: table || "-", timing: timing || "-", desc: desc || "-" };
     });
 
-  writeDbSchemaSummary(cwd, "sqlserver", cfg.database, summaryRows, views, procs, triggers, now);
+  writeRoutinesMarkdown(cwd, "sqlserver", cfg.database, views, procs, triggers, now);
+  writeDbSchemaSummary(cwd, "sqlserver", cfg.database, summaryRows, views, procs, triggers, now, false);
   console.log(
     `[scandb] 已完成 SQL Server 唯讀掃描：${summaryRows.length} 張表、${views.length} 個 View、${procs.length} 個 SP、${triggers.length} 個 Trigger。`
   );
@@ -828,7 +872,8 @@ function scanOracle(cwd, cfg, host, port, now) {
       return { name, table: table || "-", timing: timing || "-", desc: desc || "-" };
     });
 
-  writeDbSchemaSummary(cwd, "oracle", cfg.database, summaryRows, views, procs, triggers, now);
+  writeRoutinesMarkdown(cwd, "oracle", cfg.database, views, procs, triggers, now);
+  writeDbSchemaSummary(cwd, "oracle", cfg.database, summaryRows, views, procs, triggers, now, false);
   console.log(
     `[scandb] 已完成 Oracle 唯讀掃描：${summaryRows.length} 張表、${views.length} 個 View、${procs.length} 個 SP/Package、${triggers.length} 個 Trigger。`
   );
@@ -882,7 +927,7 @@ ${idxRows}
   fs.writeFileSync(filePath, content, "utf8");
 }
 
-function writeDbSchemaSummary(cwd, product, dbName, tables, views, procedures, triggers, now) {
+function writeDbSchemaSummary(cwd, product, dbName, tables, views, procedures, triggers, now, hasCodeDict = false) {
   const schemaPath = path.join(cwd, "project", "system", "db-schema.md");
   const tableLines =
     tables.length > 0
@@ -948,10 +993,98 @@ ${triggerLines}
   fs.writeFileSync(schemaPath, content, "utf8");
 }
 
+function writeRoutinesMarkdown(cwd, product, dbName, views = [], procedures = [], triggers = [], now) {
+  const filePath = path.join(cwd, "project", "system", "db", "_routines.md");
+  const viewSections =
+    views.length === 0
+      ? "無檢視表或無原始碼定義。\n"
+      : views
+          .map(
+            (v) =>
+              `### View: \`${v.name}\`\n- **說明**：${v.desc || "無說明"}\n\`\`\`sql\n${(v.fullSql || v.desc || "-- 無 DDL 原始碼").trim()}\n\`\`\`\n`
+          )
+          .join("\n");
+
+  const procSections =
+    procedures.length === 0
+      ? "無預存程序或函數。\n"
+      : procedures
+          .map(
+            (p) =>
+              `### ${p.type || "Procedure"}: \`${p.name}\`\n- **說明**：${p.desc || "無說明"}\n\`\`\`sql\n${(p.fullSql || p.desc || "-- 無 DDL 原始碼").trim()}\n\`\`\`\n`
+          )
+          .join("\n");
+
+  const triggerSections =
+    triggers.length === 0
+      ? "無觸發器。\n"
+      : triggers
+          .map(
+            (tr) =>
+              `### Trigger: \`${tr.name}\` (Table: \`${tr.table}\`, Timing: \`${tr.timing}\`)\n\`\`\`sql\n${(tr.fullSql || tr.desc || "-- 無 DDL 原始碼").trim()}\n\`\`\`\n`
+          )
+          .join("\n");
+
+  const content = `# 預存程序、視圖與觸發器程式碼主體 (Stored Procedures, Views & Triggers)
+
+- **最近掃描時間 (\`scandb\`)**：\`${now}\`
+- **資料庫產品**：\`${product}\` / **Schema**：\`${dbName}\`
+
+> 💡 本文件由 \`scandb\` 唯讀匯出，收錄舊系統資料庫中隱藏業務邏輯的 View、Stored Procedure、Function 與 Trigger 之原始 SQL/DDL 內容，供 AI 深入分析業務邏輯與 \`verify\` 行號引用。
+
+---
+
+## 1. 檢視表定義 (Views — 共 ${views.length} 個)
+
+${viewSections}
+
+---
+
+## 2. 預存程序與函數 (Stored Procedures & Functions — 共 ${procedures.length} 個)
+
+${procSections}
+
+---
+
+## 3. 觸發器 (Triggers — 共 ${triggers.length} 個)
+
+${triggerSections}
+`;
+  fs.writeFileSync(filePath, content, "utf8");
+}
+
+function writeCodeDictionaryMarkdown(cwd, entries, now) {
+  const filePath = path.join(cwd, "project", "system", "code-dictionary.md");
+  const tablesContent = entries
+    .map((entry) => {
+      const header = `| ${entry.columns.join(" | ")} |`;
+      const separator = `| ${entry.columns.map(() => "---").join(" | ")} |`;
+      const dataLines = entry.rows.map(
+        (r) => `| ${r.map((c) => (c == null ? "" : String(c).replace(/\|/g, "\\\|"))).join(" | ")} |`
+      );
+      return `## 資料表：\`${entry.tableName}\` (共 ${entry.rows.length} 筆)\n\n${header}\n${separator}\n${dataLines.join("\n")}\n`;
+    })
+    .join("\n---\n\n");
+
+  const content = `# 共用代碼表字典值 (Shared Code Dictionary)
+
+- **最近掃描時間 (\`scandb\`)**：\`${now}\`
+
+> 💡 本文件由 \`scandb\` 唯讀匯出指定代碼表前 1,000 筆資料，供 AI 在分析業務邏輯與畫面下拉選單時直接對照狀態碼、類型碼與中文含義，避免在 \`backlog.md\` 產生未知狀態碼。
+
+---
+
+${tablesContent}
+`;
+  fs.writeFileSync(filePath, content, "utf8");
+}
+
 module.exports = {
   parseDbConnectionConfig,
   scanDatabase,
   runReadOnlySchemaScan,
   writeTableMarkdown,
-  writeDbSchemaSummary
+  writeDbSchemaSummary,
+  writeRoutinesMarkdown,
+  writeCodeDictionaryMarkdown
 };

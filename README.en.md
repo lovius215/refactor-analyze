@@ -64,7 +64,7 @@ All scripts automatically verify that `npm` and `node` are installed before exec
 |---|---|---|---|---|
 | **1. Initialize & Overview** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [path]` | `rai` | Initializes workspace, `.gitignore`, and Git; locks language (`zh-TW`/`zh-CN`/`en`/`ja`/`ko`); asks for target system path & Git remote alignment; generates `project/system/` and categorized numbered `project/index.md`. |
 | **2. Scan Database Schema** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | Connects to DB via `project/system/db-connection.md` (with SSH Jump Host support) in read-only mode to scan all tables, columns, and triggers into `db-schema.md` & `db/<table>.md`. |
-| **3. Analyze by ID** | `refactor-analyze analyze <ID>` | `refactor:analyze <ID>` | `raa` | Creates `project/<ID>/` folder; analyzes business logic, data flow, SQL, dependencies, dead code, complexity, and **auto-generates `backlog.md`**. |
+| **3. Analyze by ID** | `refactor-analyze analyze <ID>` | `refactor:analyze <ID>` | `raa` | Creates `project/<ID>/` folder; analyzes business logic, **UI screen interactions & validations (`ui-behavior.md`)**, data flow, SQL, dependencies, dead code, complexity, and **auto-generates `backlog.md`**. |
 | **4. Reanalyze by ID** | `refactor-analyze reanalyze <ID>` | `refactor:reanalyze <ID>` | `rar` | Reads user clarifications in `project/<ID>/backlog.md` and latest target Git state to **reanalyze** and update all files in `project/<ID>/`. |
 | **5. 0-Token Citation & Drift Verify** | `refactor-analyze verify [ID]` | `refactor:verify [ID]` | `rav` | Local 0-Token check verifying that all cited `#Lx-Ly` files and line ranges exist in the target repo and detecting Git commit drift. |
 | **6. Commit & Safe Remote Sync** | `refactor-analyze commit [ID]` | `refactor:commit [ID]` | `rac` | Runs `verify` first, updates `project/index.md` status, creates local Git commit, and safely syncs with remote (stopping safely on merge conflicts for semantic resolution). |
@@ -83,3 +83,77 @@ All scripts automatically verify that `npm` and `node` are installed before exec
 5. **Clarify Backlog & Reanalyze (`reanalyze 001` / `rar 001`)**: Fill in answers for uncertain logic or column definitions in `project/001/backlog.md`, then run `rar 001` to reanalyze and update all documents.
 6. **Commit & Sync (`commit 001` / `rac 001`)**: Updates `project/index.md` status, commits to local Git, and syncs with remote (automatically assisting with any merge conflicts).
 7. **Update Existing Projects (`upgrade` / `update`)**: Run `refactor-analyze upgrade` anytime to update rules and templates in existing workspaces.
+
+---
+
+## 💡 Example Walkthrough: Reverse Engineering a Legacy Order System
+
+Here is a concrete end-to-end example of analyzing a 10-year-old Spring MVC + JSP order processing system (`legacy-shop`):
+
+### Step 1. Initialize Workspace
+```bash
+mkdir shop-refactor-workspace && cd shop-refactor-workspace
+refactor-analyze init --full --lang en
+```
+
+### Step 2. AI First-Pass Overview (`rai`)
+In your AI Agent chat (Gemini / Claude / Cursor / Antigravity):
+```text
+rai /Users/dev/projects/legacy-shop
+```
+Output:
+- `project/system/overview.md`: Detected as **Web System** (Spring MVC + MyBatis + JSP + MySQL).
+- `project/index.md`: Categorized feature inventory:
+  ```markdown
+  ## Category: Order Management
+  | ID | Feature / API | Entrypoint | Complexity | Current Status |
+  |---|---|---|---|---|
+  | `001` | Checkout & Place Order | `src/controller/OrderController.java#createOrder` | High | Pending Analysis |
+  | `002` | Order Detail Query | `src/controller/OrderController.java#getOrderDetail` | Low | Pending Analysis |
+  ```
+
+### Step 3. Read-Only Database & Dictionary Scan (`ras`)
+Configure `project/system/db-connection.md` (protected by `.gitignore`) with `Code Tables: SYS_CODE` and execute:
+```bash
+refactor-analyze scandb
+```
+Output:
+- `project/system/db/orders.md`, `order_items.md`: Column types, PK/FK constraints, and indexes.
+- `project/system/db/_routines.md`: Full DDL source code for Stored Procedure `SP_CALC_DISCOUNT`.
+- `project/system/code-dictionary.md`: Extracted dictionary values for `SYS_CODE` (`ORDER_STS`: `01=Draft, 02=Paid, 03=Shipped`).
+
+### Step 4. Deep-Dive Analysis for ID 001 (`raa 001`)
+```bash
+refactor-analyze analyze 001
+# Or in AI chat:
+raa 001
+```
+AI generates 8 structured documents under `project/001/` with zero hallucination:
+1. **`analysis.md`**: Entrypoint args, implicit session dependencies (`Session["CURRENT_DEPT_ID"]`), and As-Is vs To-Be notes (identifies N+1 query antipattern in `for` loop).
+2. **`business-logic.md`**: Strict business rules with line citations (`OrderService.java#L85-L112`), `@Transactional` scope, and Given/When/Then acceptance scenarios (`TC-01`, `TC-02`).
+3. **`ui-behavior.md`**: DropDownList sources from `SYS_CODE`, and UI vs Backend validation matrix (catches missing server-side quantity check).
+4. **`data-flow.md`**: Request → Service → DB write mapping to `orders` and `order_items`.
+5. **`sql.md`**: Raw SQL from `OrderMapper.xml` with dynamic `<if>` tag explanations.
+6. **`dependencies.md`**: Upstream callers and downstream shared modules.
+7. **`dead-code.md`**: Commented-out pricing calculations with Git commit and line ranges.
+8. **`backlog.md`**: Unclear magic numbers (`FLG_03 = 'K'`) listed for developer clarification.
+
+### Step 5. 0-Token Citation Verification & Drift Detection (`rav 001`)
+```bash
+refactor-analyze verify 001
+```
+Locally verifies that `OrderService.java#L85-L112` exists and line counts match. Detects Git commit drift if the target codebase was modified.
+
+### Step 6. Commit, Aggregate & Remote Sync (`rac 001`)
+```bash
+refactor-analyze commit 001
+```
+- Automatically aggregates `orders` CRUD operations into `project/system/domain-flows.md`.
+- Updates `project/index.md` status to `Completed`.
+- Creates local Git commit and syncs with remote safely.
+
+### Step 7. One-Click PDF Export (`rap 001`)
+```bash
+refactor-analyze pdf 001 --merge
+```
+Generates `project/001/001-merged.pdf` with cover page, syntax highlighting, and table of contents for stakeholders and architects.

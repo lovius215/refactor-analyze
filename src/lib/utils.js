@@ -459,6 +459,139 @@ function fail(message) {
   process.exitCode = 1;
 }
 
+function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
+  const normId = normalizeItemId(itemId);
+  const itemDir = path.join(cwd, "project", normId);
+  if (!fs.existsSync(itemDir)) return;
+
+  // 1. Parse data-flow.md for CRUD mappings
+  const dataFlowPath = path.join(itemDir, "data-flow.md");
+  const domainFlowsPath = path.join(cwd, "project", "system", "domain-flows.md");
+
+  if (fs.existsSync(dataFlowPath) && fs.existsSync(domainFlowsPath)) {
+    const dataFlowContent = fs.readFileSync(dataFlowPath, "utf8");
+    const lines = dataFlowContent.split("\n");
+    const tableOps = new Map();
+
+    for (const line of lines) {
+      if (!line.startsWith("|") || line.includes("資料表名稱") || line.includes("---")) continue;
+      const parts = line
+        .split("|")
+        .map((p) => p.trim())
+        .filter(Boolean);
+      if (parts.length >= 2) {
+        const tName = parts[0].replace(/`/g, "").trim();
+        const op = parts[1].toUpperCase();
+        if (!tName || tName === "待分析" || tName === "-") continue;
+        if (!tableOps.has(tName)) tableOps.set(tName, new Set());
+        for (const char of ["C", "R", "U", "D"]) {
+          if (op.includes(char)) tableOps.get(tName).add(char);
+        }
+      }
+    }
+
+    if (tableOps.size > 0) {
+      let domainFlows = fs.readFileSync(domainFlowsPath, "utf8");
+      const matrixHeader = "## 2. 資料表與功能編號 CRUD 對照矩陣 (Table CRUD Matrix)";
+      const secIdx = domainFlows.indexOf(matrixHeader);
+      if (secIdx !== -1) {
+        const beforeSec = domainFlows.slice(0, secIdx + matrixHeader.length);
+        const afterSec = domainFlows.slice(secIdx + matrixHeader.length);
+        const afterLines = afterSec.split("\n");
+        const existingTableRows = new Map();
+        const nonTableLines = [];
+
+        for (const l of afterLines) {
+          if (l.startsWith("|") && !l.includes("資料表名稱") && !l.includes("---")) {
+            const p = l
+              .split("|")
+              .map((x) => x.trim())
+              .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+            if (p.length >= 5 && p[0] !== "待補充") {
+              const cleanT = p[0].replace(/`/g, "");
+              existingTableRows.set(cleanT, {
+                c: p[1],
+                r: p[2],
+                u: p[3],
+                d: p[4]
+              });
+              continue;
+            }
+          }
+          if (l.trim() && l.trim() !== "| 待補充 | - | - | - | - |") {
+            nonTableLines.push(l);
+          }
+        }
+
+        for (const [tName, ops] of tableOps.entries()) {
+          const current = existingTableRows.get(tName) || { c: "-", r: "-", u: "-", d: "-" };
+          const appendId = (cell, opChar) => {
+            if (!ops.has(opChar)) return cell;
+            if (cell === "-") return `\`${normId}\``;
+            const ids = cell.split(",").map((x) => x.trim()).filter(Boolean);
+            if (!ids.includes(`\`${normId}\``)) ids.push(`\`${normId}\``);
+            return ids.join(", ");
+          };
+          current.c = appendId(current.c, "C");
+          current.r = appendId(current.r, "R");
+          current.u = appendId(current.u, "U");
+          current.d = appendId(current.d, "D");
+          existingTableRows.set(tName, current);
+        }
+
+        let newTableRows = "";
+        for (const [tName, row] of existingTableRows.entries()) {
+          newTableRows += `| \`${tName}\` | ${row.c} | ${row.r} | ${row.u} | ${row.d} |\n`;
+        }
+
+        const tableHeader =
+          "\n\n| 資料表名稱 (`project/system/db/`) | `C` (新增編號) | `R` (查詢編號) | `U` (更新編號) | `D` (刪除編號) |\n|---|---|---|---|---|\n";
+        domainFlows =
+          beforeSec +
+          tableHeader +
+          newTableRows +
+          "\n" +
+          nonTableLines.filter((l) => !l.startsWith("|") && l.trim()).join("\n");
+        fs.writeFileSync(domainFlowsPath, domainFlows.trimEnd() + "\n", "utf8");
+      }
+    }
+  }
+
+  // 2. Parse dead-code.md for newly discovered dead code snippets
+  const deadCodePath = path.join(itemDir, "dead-code.md");
+  const sysDeadCodePath = path.join(cwd, "project", "system", "dead-code.md");
+  if (fs.existsSync(deadCodePath) && fs.existsSync(sysDeadCodePath)) {
+    const itemDeadCode = fs.readFileSync(deadCodePath, "utf8");
+    if (!itemDeadCode.includes("無死程式碼") && !itemDeadCode.includes("(待 AI 分析填寫)")) {
+      const lines = itemDeadCode.split("\n");
+      const foundRows = [];
+      for (const line of lines) {
+        if (line.startsWith("|") && !line.includes("程式檔案名稱") && !line.includes("---") && !line.includes("待分析")) {
+          const parts = line
+            .split("|")
+            .map((p) => p.trim())
+            .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+          if (parts.length >= 4) {
+            foundRows.push(parts);
+          }
+        }
+      }
+
+      if (foundRows.length > 0) {
+        let sysDeadCode = fs.readFileSync(sysDeadCodePath, "utf8");
+        for (const r of foundRows) {
+          const filePath = r[0] || "";
+          if (filePath && !sysDeadCode.includes(filePath)) {
+            const tableRow = `| \`${normId}\` | - | - | \`${r[0]}\` | ${r[1]} | ${r[2] || "-"} |\n`;
+            sysDeadCode = sysDeadCode.replace("| `system` |", tableRow + "| `system` |");
+          }
+        }
+        fs.writeFileSync(sysDeadCodePath, sysDeadCode, "utf8");
+      }
+    }
+  }
+}
+
 module.exports = {
   rootDir,
   templatesDir,
@@ -473,6 +606,7 @@ module.exports = {
   isIndexHeaderRow,
   parseIndexItems,
   updateIndexRowStatus,
+  aggregateDomainFlowsAndDeadCode,
   detectProjectLanguage,
   getDefaultRemote,
   getCurrentBranch,

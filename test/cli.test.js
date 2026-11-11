@@ -70,6 +70,7 @@ test("1. init, analyze, 0-Token verify (anti-hallucination & drift detection), a
     assert.equal(analyzeRes.status, 0, `analyze failed: ${analyzeRes.stderr}`);
     assert.ok(fs.existsSync(path.join(workDir, "project", "001", "analysis.md")));
     assert.ok(fs.existsSync(path.join(workDir, "project", "001", "business-logic.md")));
+    assert.ok(fs.existsSync(path.join(workDir, "project", "001", "ui-behavior.md")));
     assert.ok(fs.existsSync(path.join(workDir, "project", "001", "backlog.md")));
 
     // 5. Verify should FAIL on unfilled template placeholders
@@ -79,7 +80,7 @@ test("1. init, analyze, 0-Token verify (anti-hallucination & drift detection), a
 
     // 6. Write hallucinated file path & out-of-range line numbers -> Verify should catch both!
     const itemDir = path.join(workDir, "project", "001");
-    for (const f of ["analysis.md", "data-flow.md", "sql.md", "dependencies.md", "dead-code.md", "backlog.md"]) {
+    for (const f of ["analysis.md", "ui-behavior.md", "data-flow.md", "sql.md", "dependencies.md", "dead-code.md", "backlog.md"]) {
       const p = path.join(itemDir, f);
       const cleaned = fs.readFileSync(p, "utf8").replace(/\*\(待 AI 分析填寫\)\*/g, "已填寫分析內容").replace(/待確認/g, "已釐清");
       fs.writeFileSync(p, cleaned, "utf8");
@@ -101,9 +102,21 @@ test("1. init, analyze, 0-Token verify (anti-hallucination & drift detection), a
       "# Business Logic\n- Rule 1: Validate order items and calculate total (`src/OrderService.js#L2-L8`).\n",
       "utf8"
     );
+    fs.writeFileSync(
+      path.join(itemDir, "data-flow.md"),
+      "# Data Flow\n\n## 2. DB Tables\n| 資料表名稱 (`project/system/db/`) | 操作 (`C`/`R`/`U`/`D`) | 涉及欄位名稱 | 欄位型態與說明 | 對應程式位置與行號 |\n|---|---|---|---|---|\n| `orders` | `C` | `id, total` | BIGINT | `src/OrderService.js#L2-L8` |\n",
+      "utf8"
+    );
     const verifyValid = runCli(workDir, ["verify", "001"]);
     assert.equal(verifyValid.status, 0, `verify should pass: ${verifyValid.stdout}`);
     assert.match(verifyValid.stdout, /PASS \[001\]/);
+
+    // Commit 001 and verify automatic aggregation to domain-flows.md
+    const commitItemRes = runCli(workDir, ["commit", "001"]);
+    assert.equal(commitItemRes.status, 0, `commit failed: ${commitItemRes.stderr}`);
+    const domainFlowsAfterCommit = fs.readFileSync(path.join(workDir, "project", "system", "domain-flows.md"), "utf8");
+    assert.match(domainFlowsAfterCommit, /`orders`/);
+    assert.match(domainFlowsAfterCommit, /`001`/);
 
     // 8. Modify target repo file and commit -> Verify should detect Git commit drift!
     fs.writeFileSync(
@@ -145,6 +158,8 @@ test("2. scandb extracts tables, columns, foreign keys, indexes, views, and trig
       CREATE INDEX idx_orders_customer ON orders(customer_id);
       CREATE VIEW v_customer_orders AS SELECT c.email, o.total_amount FROM customers c JOIN orders o ON c.id = o.customer_id;
       CREATE TRIGGER trg_orders_audit AFTER INSERT ON orders BEGIN SELECT 1; END;
+      CREATE TABLE sys_code (code_type TEXT, code_id TEXT, code_name TEXT);
+      INSERT INTO sys_code VALUES ('ORDER_STS', '01', '草稿'), ('ORDER_STS', '02', '已審核');
     `;
     spawnSync("sqlite3", [dbPath, initSql], { encoding: "utf8" });
 
@@ -153,7 +168,8 @@ test("2. scandb extracts tables, columns, foreign keys, indexes, views, and trig
     connText = connText
       .replace(/\(Enabled\)\*\*:\s*`false`/, "(Enabled)**: `true`")
       .replace(/\(Database Product\)\*\*:\s*`[^`]*`/, "(Database Product)**: `sqlite`")
-      .replace(/\(Host \/ Path\)\*\*:\s*`[^`]*`/, "(Host / Path)**: `./legacy.sqlite`");
+      .replace(/\(Host \/ Path\)\*\*:\s*`[^`]*`/, "(Host / Path)**: `./legacy.sqlite`")
+      .replace(/\(Code Tables\)\*\*:\s*`[^`]*`/, "(Code Tables)**: `sys_code`");
     fs.writeFileSync(connPath, connText, "utf8");
 
     const scanRes = runCli(workDir, ["scandb"]);
@@ -168,6 +184,15 @@ test("2. scandb extracts tables, columns, foreign keys, indexes, views, and trig
     const ordersDoc = fs.readFileSync(path.join(workDir, "project", "system", "db", "orders.md"), "utf8");
     assert.match(ordersDoc, /FK -> customers\.id/);
     assert.match(ordersDoc, /idx_orders_customer/);
+
+    const routinesDoc = fs.readFileSync(path.join(workDir, "project", "system", "db", "_routines.md"), "utf8");
+    assert.match(routinesDoc, /View: `v_customer_orders`/);
+    assert.match(routinesDoc, /Trigger: `trg_orders_audit`/);
+
+    const codeDictDoc = fs.readFileSync(path.join(workDir, "project", "system", "code-dictionary.md"), "utf8");
+    assert.match(codeDictDoc, /sys_code/);
+    assert.match(codeDictDoc, /ORDER_STS/);
+    assert.match(codeDictDoc, /已審核/);
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
   }

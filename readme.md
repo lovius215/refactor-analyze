@@ -33,7 +33,7 @@ refactor-analyze init --full
 **🤖 Core AI & CLI Workflow (Gemini / Claude / GPT / Cursor / Antigravity):**
 - `refactor:init [路徑]` (`rai`) → 鎖定語言、詢問目標系統路徑與是否向 Git remote 對齊，產出**系統大概**（`project/system/`）與**分類編號清單**（`project/index.md`）
 - `refactor:scandb` (`ras` / CLI `refactor-analyze scandb`) → 依據 `db-connection.md`（支援 SQLite、MySQL/MariaDB、PostgreSQL、SQL Server `sqlcmd`、Oracle `sqlplus` 與 SSH 跳板機，**帳密不進 AI 對話框**）以**強制唯讀 Session** 抓取所有 Table、欄位、PK/FK、Index、註解、View、SP 與 Trigger
-- `refactor:analyze <編號>` (`raa`) → 新建以**編號**命名的資料夾（`project/001/`），產出分析、業務邏輯、資料流、SQL、依賴關係、死程式碼，並**自動產出 `backlog.md`**
+- `refactor:analyze <編號>` (`raa`) → 新建以**編號**命名的資料夾（`project/001/`），產出分析、業務邏輯、**畫面操作行為與驗證（`ui-behavior.md`）**、資料流、SQL、依賴關係、死程式碼，並**自動產出 `backlog.md`**
 - `refactor:reanalyze <編號>` (`rar`) → 在 `backlog.md` 補充未知欄位或業務邏輯後，**再分析一次**並同步更新文件
 - `refactor:verify [編號]` (`rav` / CLI `refactor-analyze verify`) → **0-Token 防幻覺與版本飄移驗證**：自動核對 `#Lx-Ly` 原始碼檔案與行號是否真實存在，並比對 Git Commit Hash 偵測目標系統是否已改版導致行號偏移
 - `refactor:commit [編號]` (`rac`) → 通過 `verify` 後更新 `project/index.md` 狀態、自動 Git commit、若有 remote 自動安全 sync（**CLI 遇衝突時安全停止不破壞檔案，交由 AI `rac` 進行語意合併**）
@@ -150,39 +150,54 @@ scripts\uninstall.bat
 
 ### 步驟 1：初始化獨立工作區
 ```bash
-mkdir erp-refactor-workspace
-cd erp-refactor-workspace
+# 建立並進入分析工作區（與舊系統原始碼目錄分開，互不污染）
+mkdir shop-refactor-workspace && cd shop-refactor-workspace
+
+# 初始化工作區（建立 .gitignore、AGENTS.md、規則集與空白模板）
 refactor-analyze init --full --lang zh-TW
 ```
 
-### 步驟 2：啟動 AI 分析並產出系統大概與分類編號清單（`init` / `rai`）
-在 AI 對話側邊欄輸入：
+### 步驟 2：啟動 AI 進行第一階段全域盤點 (`rai`)
+在 AI Agent（Gemini / Claude / Cursor / Antigravity）的對話框輸入：
 ```text
-rai /Users/lovius/projects/legacy-erp
+rai /Users/dev/projects/legacy-shop
 ```
-- AI 會檢查本工作區與目標舊系統的 Git 分支与 Commit Hash，並主動詢問你**是否有需要向 remote 對齊**。
-- 接著產出 `project/system/overview.md`（判斷是 **APP、桌面應用程式、還是網頁**，並附上涵蓋範圍說明）、`tech-stack.md`、`architecture.md`（含全域 Filter/Interceptor/AOP）、`dead-code.md`。
+- AI 會檢查本工作區與目標舊系統的 Git 分支與 Commit Hash，並主動詢問你**是否有需要向 remote 對齊**。
+- 接著產出 `project/system/overview.md`（判定為 **網頁系統 (Web)**，技術為 Spring MVC + MyBatis + JSP + MySQL，並附上涵蓋範圍說明）、`tech-stack.md`、`architecture.md`（含全域 Filter/Interceptor/AOP）、`dead-code.md`。
 - 產出 `project/index.md` 分類編號清單（**同分類放在一起，無法歸類的統一放在「其他」**）：
   ```markdown
-  ## 分類：訂單管理 (Order)
-  | 編號 | 功能或 API | 程式的位置 | 複雜度 | 目前的狀態 |
+  ## 分類：訂單管理 (Order Management)
+  | 編號 | 功能或 API | 程式的位置（進入點） | 複雜度 | 目前的狀態 |
   |---|---|---|---|---|
-  | `001` | 建立訂單 (`POST /api/orders`) | `src/controller/OrderController.java#create` | 高 | 待分析 |
-  | `002` | 查詢訂單 (`GET /api/orders/{id}`) | `src/controller/OrderController.java#detail` | 低 | 待分析 |
+  | `001` | 購物車結帳與建立訂單 | `src/controller/OrderController.java#createOrder` | 高 | 待分析 |
+  | `002` | 訂單明細與狀態查詢 | `src/controller/OrderController.java#getOrderDetail` | 低 | 待分析 |
 
   ## 分類：其他 (Other)
-  | 編號 | 功能或 API | 程式的位置 | 複雜度 | 目前的狀態 |
+  | 編號 | 功能或 API | 程式的位置（進入點） | 複雜度 | 目前的狀態 |
   |---|---|---|---|---|
-  | `003` | 舊版匯入批次 | `src/batch/LegacyImportJob.java#run` | 中 | 疑似廢棄 |
+  | `003` | 歷史訂單匯出批次 | `src/batch/OrderExportJob.java#run` | 中 | 待分析 |
   ```
 
-### 步驟 3：連結資料庫掃描所有欄位（`scandb` / `ras`）
-編輯 `project/system/db-connection.md`（已被 `.gitignore` 保護），填入資料庫產品、連線路徑、帳號、密碼與跳板機設定，然後執行：
+### 步驟 3：連結資料庫掃描結構與代碼表 (`scandb` / `ras`)
+在 `project/system/db-connection.md` 填妥連線設定與共用代碼表（已被 `.gitignore` 保護，帳密絕不進入 AI 對話框）：
+```markdown
+- **啟用資料庫掃描 (Enabled)**: `true`
+- **資料庫產品 (Database Product)**: `mysql`
+- **連線主機或檔案路徑 (Host / Path)**: `127.0.0.1`
+- **連接埠 (Port)**: `3306`
+- **資料庫名稱 / Schema (Database / Schema)**: `shop_db`
+- **帳號 (Username)**: `readonly_user`
+- **密碼 (Password)**: `secret123`
+- **共用代碼表清單 (Code Tables)**: `SYS_CODE`
+```
+在終端機執行（或在 AI 對話框輸入 `ras`）：
 ```bash
 refactor-analyze scandb
-# 或在 AI 對話框輸入：ras
 ```
-系統會實際連進資料庫抓取所有資料表與欄位，產出 `project/system/db-schema.md` 與 `project/system/db/<table>.md`。
+系統會以唯讀交易模式實際連線抓取：
+- `project/system/db/orders.md`、`order_items.md`：資料表欄位型態、主外鍵 PK/FK、Index 與註解。
+- `project/system/db/_routines.md`：匯出預存程序 `SP_CALC_DISCOUNT` 的完整 SQL 原始碼。
+- `project/system/code-dictionary.md`：自動匯出 `SYS_CODE` 字典（如 `ORDER_STS`: `01=草稿, 02=已付款, 03=已出貨`），AI 分析時直接查表，不再腦補狀態碼。
 
 ### 步驟 4：依編號深入分析業務邏輯（`analyze <編號>` / `raa <編號>`）
 針對清單上的編號 `001` 執行：
@@ -191,14 +206,23 @@ refactor-analyze analyze 001
 # 並在 AI 對話框輸入：
 raa 001
 ```
-自動新建 **`project/001/`** 資料夾，產出 7 份核心文件（所有內容皆附原始碼檔案與行號來源，絕不無中生有）：
-- `analysis.md`：記錄執行分析時間日期、目標系統 Git 分支與 Hash、進入點、Request/Response/Input/Output Args、複雜度原因、以及**技術債與重構建議（To-Be Notes）**。
-- `business-logic.md`：商業規則、流程、計算公式与驗證邏輯。
-- `data-flow.md`：資料流向與讀寫的 DB 資料表/欄位。
-- `sql.md`：該功能用到的所有 SQL 語句、動態條件與邏輯解析。
-- `dependencies.md`：上下游依賴與 `project/shared/` 共用元件引用。
-- `dead-code.md`：列出 **Git 分支、Git Commit Hash、程式檔案名稱、行數、判定原因與相關代碼片段**。
-- `backlog.md`：**自動產出**目前還不確定的業務邏輯或未知欄位定義。
+AI 會針對 `001` 深入呼叫鏈，自動新建 **`project/001/`** 資料夾並產出 8 份標準文件（**禁止 AI 幻想鐵律：每一項規則必附原始碼檔案與行號**）：
+1. **`analysis.md`**：記錄進入點 Request/Response Args、**隱性 Session 依賴**（如偷讀 `Session["CURRENT_DEPT_ID"]`），以及 **As-Is 現況 vs To-Be 重構建議**（指出舊代碼在 `for` 迴圈內查 DB 導致 N+1 效能問題，重構時應改為批次查詢）。
+2. **`business-logic.md`**：
+   - 核心規則清單（附行號）：
+     | 規則編號 | 觸發條件 | 執行動作 / 結果 | 原始碼檔案與行號來源 |
+     |---|---|---|---|
+     | `BR-01` | 購物車金額 > 10,000 且會員等級為 VIP | 自動套用 9 折並產生贈品序號 | `src/service/OrderService.java#L85-L112` |
+   - 交易邊界與鎖定：記錄 `@Transactional` 涵蓋表與樂觀鎖 `VERSION` 欄位。
+   - 重構驗收測試情境：提供 `TC-01 (滿萬打折成功)`、`TC-02 (庫存不足阻擋)` 的 Given/When/Then 驗收規格。
+3. **`ui-behavior.md`**：
+   - 記錄下拉選單 `ddlPayment` 資料查自 `SYS_CODE WHERE CODE_TYPE = 'PAY'`。
+   - **前後端驗證對照矩陣**：抓出「JSP 前端限制數量最多 99 件，但後端 Controller 漏寫檢查」的安全漏洞！
+4. **`data-flow.md`**：記錄資料從 Request → Service → 寫入 `orders`、`order_items` 表。
+5. **`sql.md`**：完整收錄 `OrderMapper.xml#insertOrder` 之 SQL 語句與動態 `<if test="coupon != null">` 條件解析。
+6. **`dependencies.md`**：梳理呼叫鏈與 `project/shared/` 共用模組。
+7. **`dead-code.md`**：標註被註解掉的舊計算邏輯（附 Git commit 與檔案行號）。
+8. **`backlog.md`**：自動列出程式中語意不明的魔術數字（如 `FLG_03 = 'K'`），標記為待人工釐清。
 
 ### 步驟 5：補充 Backlog 後重新分析（`reanalyze <編號>` / `rar <編號>`）
 在 `project/001/backlog.md` 填上未知欄位或規則的說明後，執行：
@@ -207,14 +231,32 @@ rar 001
 ```
 AI 會讀取你補充的定義**再分析一次**，更新 `project/001/` 內的所有文件與最新分析時間、Git 版本。
 
-### 步驟 6：確認歸檔、更新清單與自動 Git Commit & Sync（`commit` / `rac`）
+### 步驟 6：0-Token 驗證來源與版本飄移 (`verify` / `rav`)
+在歸檔前執行本機 0-Token 驗證：
+```bash
+refactor-analyze verify 001
+# 或在 AI 對話輸入：rav 001
+```
+CLI 會在本地自動核對：
+- ✅ `src/service/OrderService.java#L85-L112` 等行號範圍是否真實存在且行數正確。
+- ✅ 比對目標系統 Git Commit Hash，若目標系統已被修改改版，立即發出「版本飄移警告（Git Drift Detected）」。
+
+### 步驟 7：確認歸檔、更新清單與自動 Git Commit & Sync（`commit` / `rac`）
 確認分析結果無誤後，執行：
 ```bash
 refactor-analyze commit 001
 # 或在 AI 對話框輸入：rac 001
 ```
-- 正式將 `project/index.md` 中 `001` 的狀態更新為 `已完成`（或 `待確認`），並同步更新 `domain-flows.md` 與 `system/dead-code.md`。
+- CLI 自動解析 `001/data-flow.md`，將 `orders` 表的 `C/U` 操作 **0-Token 自動匯總至 `project/system/domain-flows.md` 的 CRUD 矩陣**！
+- 自動將 `project/index.md` 中 `001` 的狀態更新為 `已完成`（或 `待確認`），並同步更新 `system/dead-code.md`。
 - 自動建立本機 Git commit，若 Git 有設定 remote 則自動執行 sync（pull + push）；**若遇到 Git 衝突，會主動協助解析並合併衝突，處理完成後自動再次 commit 與 sync**！
+
+### 步驟 8：一鍵匯出專業 PDF 報告 (`pdf` / `rap`)
+```bash
+# 將編號 001 的 8 份文件合併為單一美觀 PDF 報告
+refactor-analyze pdf 001 --merge
+```
+生成的 `project/001/001-merged.pdf` 包含封面、目錄、代碼引用與語法高亮，0-Token 本機渲染完成，可直接交付主管與架構師審查！
 
 ---
 
@@ -236,19 +278,22 @@ project/
     architecture.md            # 3. 現行系統架構、目錄職責、全域隱性機制（Filter / Interceptor / AOP / Middleware）
     domain-flows.md            # 4. 跨編號領域狀態機（State Machine）與核心資料表 CRUD 對照矩陣
     dead-code.md               # 5. 全系統死程式碼總表（列出 Git 分支、Hash、程式檔案名稱、行數、相關代碼）
-    db-schema.md               # 6. 資料庫總覽索引（資料表、View、Stored Procedure、Trigger 列表）
-    db/                        # 7. 各資料表欄位明細（依 Table 拆檔以節省 Token）
+    code-dictionary.md         # 6. 共用代碼表字典值（scandb 抓取之狀態碼、類型字典對照表）
+    db-schema.md               # 7. 資料庫總覽索引（資料表、View、Stored Procedure、Trigger 列表）
+    db/                        # 8. 各資料表欄位明細與常式原始碼（依 Table 拆檔節省 Token）
+      _routines.md             #    View、Stored Procedure、Function 與 Trigger 之完整 DDL 原始碼
       <table>.md
   shared/                      # 多編號共用邏輯抽離區（避免重複分析燒 Token）
     <shared-module>.md
   001/                         # 第二階段：以「編號」命名的獨立業務邏輯資料夾
     analysis.md                # 1. 分析（執行時間、Git 分支與 Hash、進入點與 I/O Args、涉及檔案、複雜度、重構建議）
     business-logic.md          # 2. 業務邏輯（規則、流程、狀態轉換、計算與驗證邏輯，必附檔案與行號來源）
-    data-flow.md               # 3. 資料流（Input -> 處理 -> DB 表/欄位讀寫 -> Output）
-    sql.md                     # 4. SQL 與查詢邏輯整理（原始 SQL、檔案與行數、條件解析與優化建議）
-    dependencies.md            # 5. 依賴關係（上下游模組、shared/ 共用元件引用、DB Table、外部 API）
-    dead-code.md               # 6. 死程式碼記錄（列出 Git 分支、Hash、程式檔案名稱、行數、相關代碼）
-    backlog.md                 # 7. Backlog（自動產出不確定的業務邏輯與未知欄位定義）
+    ui-behavior.md             # 3. 畫面操作行為與驗證（畫面欄位動態顯隱/唯讀連動、操作事件、元件權限與前後端驗證對照矩陣）
+    data-flow.md               # 4. 資料流（Input -> 處理 -> DB 表/欄位讀寫 -> Output）
+    sql.md                     # 5. SQL 與查詢邏輯整理（原始 SQL、檔案與行數、條件解析與優化建議）
+    dependencies.md            # 6. 依賴關係（上下游模組、shared/ 共用元件引用、DB Table、外部 API）
+    dead-code.md               # 7. 死程式碼記錄（列出 Git 分支、Hash、程式檔案名稱、行數、相關代碼）
+    backlog.md                 # 8. Backlog（自動產出不確定的業務邏輯與未知欄位定義）
 ```
 
 ---

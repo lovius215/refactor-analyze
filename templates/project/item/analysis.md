@@ -27,6 +27,11 @@
   | 欄位或狀態碼 | 資料型態 | 說明（附檔案行號來源） |
   |---|---|---|
   | 待分析 | - | - |
+- **隱性上下文依賴與狀態盤點 (Implicit Context / Session / ThreadLocal / Global State)**：
+  > ⚠️ **重構防坑重點**：舊系統常在進入點後方深處直接取用 `Session["USER_ID"]`、`HttpContext`、`ThreadLocal`、Cookie 或全域靜態變數。重構為現代無狀態 REST API 時若未盤點，將造成缺少關鍵欄位或權限漏洞。
+  | 隱性參數名稱 / 鍵值 | 來源 (`Session`/`Cookie`/`ThreadLocal`/`Global`/`Header`) | 型態 | 業務意義與用途 | 程式中讀取之位置與行號 | 重構建議傳入方式 (`JWT Claims`/`Header`/`Body`) |
+  |---|---|---|---|---|---|
+  | *(待 AI 分析填寫；若無隱性依賴請填「無」)* | - | - | - | - | - |
 
 ---
 

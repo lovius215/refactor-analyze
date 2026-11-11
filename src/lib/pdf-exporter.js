@@ -37,6 +37,7 @@ function exportMarkdownToPdf(cwd, args = []) {
       const order = [
         "analysis.md",
         "business-logic.md",
+        "ui-behavior.md",
         "data-flow.md",
         "sql.md",
         "dependencies.md",

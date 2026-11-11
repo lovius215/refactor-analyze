@@ -22,7 +22,7 @@
 |---|---|---|---|---|
 | `refactor:init [路徑]` | `rai` | `refactor-analyze init` | 初始化與產出系統大概 | 載入 `AGENTS.md`、`skills/refactor-analyze/SKILL.md` 與 `rules/`；確認並鎖定語言（`zh-TW`/`zh-CN`/`en`/`ja`/`ko`）；確認本工作區 Git 狀態；若未提供目標系統路徑則主動詢問；檢查工作區與目標系統 Git 分支与 Commit Hash，並**主動詢問使用者是否需要先向 remote 對齊（fetch/pull）**；接著分析產出系統大概（`project/system/`）與分類編號清單（`project/index.md`）。 |
 | `refactor:scandb` | `ras` | `refactor-analyze scandb` | 連結資料庫掃描欄位 | 由本機 CLI 讀取 `project/system/db-connection.md`（**帳密不進入 AI Context**；支援 SQLite、MySQL/MariaDB、PostgreSQL、SQL Server `sqlcmd`、Oracle `sqlplus` 與獨立 SSH ControlMaster 跳板機通道），強制啟用**唯讀 Session** 抓取所有 Table、欄位、型別、PK/FK、Index、欄位註解（Comment）、View、Stored Procedure 與 Trigger，產出 `project/system/db-schema.md` 與 `project/system/db/<table>.md`。 |
-| `refactor:analyze <編號>` | `raa` | `refactor-analyze analyze <編號>` | 依編號深入分析業務邏輯 | 依據 `project/index.md` 的「編號」自動新建以編號命名的獨立資料夾 `project/<編號>/`；記錄執行分析時間日期、目標系統當下 Git 分支與 Commit Hash；從程式位置（進入點）深入分析並對照 `project/system/db/` 與 `project/shared/`，產出 `analysis.md`、`business-logic.md`、`data-flow.md`、`sql.md`、`dependencies.md`、`dead-code.md`，並**自動產出 `backlog.md`**。 |
+| `refactor:analyze <編號>` | `raa` | `refactor-analyze analyze <編號>` | 依編號深入分析業務邏輯 | 依據 `project/index.md` 的「編號」自動新建以編號命名的獨立資料夾 `project/<編號>/`；記錄執行分析時間日期、目標系統當下 Git 分支與 Commit Hash；從程式位置（進入點）深入分析並對照 `project/system/db/` 與 `project/shared/`，產出 `analysis.md`、`business-logic.md`、`ui-behavior.md`（畫面操作行為與驗證）、`data-flow.md`、`sql.md`、`dependencies.md`、`dead-code.md`，並**自動產出 `backlog.md`**。 |
 | `refactor:reanalyze <編號>` | `rar` | `refactor-analyze reanalyze <編號>` | 補充 Backlog 後重新分析 | 讀取 `project/<編號>/backlog.md` 內使用者補充的業務邏輯或欄位定義（以及目標系統最新程式碼、DB 與 Git 分支/Hash），**再分析一次**並同步更新 `project/<編號>/` 內所有文件與執行分析時間日期。 |
 | `refactor:verify [編號]` | `rav` | `refactor-analyze verify [編號]` | 0-Token 驗證來源與版本飄移 | 本機 0-Token 掃描 `project/<編號>/` 內所有 `` `<file>#L<start>-L<end>` `` 引用，核對目標系統實體檔案與行數是否真實存在，並比對目標系統 Git Commit Hash 偵測是否因改版導致行號飄移（Drift Detection）。 |
 | `refactor:commit [編號]` | `rac` | `refactor-analyze commit [編號]` | 確認歸檔與 Git 同步 | 先自動執行 `verify` 驗證來源引用完整性，通過後更新 `project/index.md` 的「複雜度」與「目前的狀態」；同步匯總至 `project/system/domain-flows.md` 與 `project/system/dead-code.md`；自動建立本機 Git commit（排除 `db-connection.md`）；若 Git 有設定 remote 則自動 sync（pull + push），**CLI 遇到 Git 衝突時安全停止不破壞檔案，交由 AI (`rac`) 進行語意合併後再自動 commit 與 sync**。 |
@@ -54,11 +54,12 @@ project/
   001/                         # 第二階段：以「編號」命名的獨立業務邏輯資料夾（analyze 001 / reanalyze 001 產出，commit 001 確認歸檔）
     analysis.md                # 1. 分析（執行日期時間、Git 分支與 Hash、進入點與 Request/Response/Input/Output Args、涉及檔案、複雜度、技術債與重構建議 To-Be Notes）
     business-logic.md          # 2. 業務邏輯（商業規則、流程、狀態轉換、計算與驗證邏輯，必附檔案與行號來源）
-    data-flow.md               # 3. 資料流（Input -> 處理 -> 對應 system/db/ 的資料表與欄位讀寫 -> Output）
-    sql.md                     # 4. SQL 與查詢邏輯整理（列出原始 SQL / MyBatis / ORM Query、檔案與行數、動態條件解析與優化建議）
-    dependencies.md            # 5. 依賴關係（上下游模組、project/shared/ 共用元件引用、DB Table、外部 API 與套件依賴）
-    dead-code.md               # 6. 死程式碼記錄（強制列出 Git 分支、Commit Hash、程式檔案名稱、行數、相關代碼）
-    backlog.md                 # 7. Backlog（自動產出不確定的業務邏輯、未知欄位定義、未明狀態碼）
+    ui-behavior.md             # 3. 畫面操作行為與驗證（畫面欄位動態顯隱/唯讀連動、事件觸發、元件權限與前後端驗證規則對照矩陣）
+    data-flow.md               # 4. 資料流（Input -> 處理 -> 對應 system/db/ 的資料表與欄位讀寫 -> Output）
+    sql.md                     # 5. SQL 與查詢邏輯整理（列出原始 SQL / MyBatis / ORM Query、檔案與行數、動態條件解析與優化建議）
+    dependencies.md            # 6. 依賴關係（上下游模組、project/shared/ 共用元件引用、DB Table、外部 API 與套件依賴）
+    dead-code.md               # 7. 死程式碼記錄（強制列出 Git 分支、Commit Hash、程式檔案名稱、行數、相關代碼）
+    backlog.md                 # 8. Backlog（自動產出不確定的業務邏輯、未知欄位定義、未明狀態碼）
 ```
 
 ---

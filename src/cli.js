@@ -14,6 +14,7 @@ const {
   normalizeItemId,
   parseIndexItems,
   updateIndexRowStatus,
+  aggregateDomainFlowsAndDeadCode,
   detectProjectLanguage,
   getDefaultRemote,
   getCurrentBranch,
@@ -295,6 +296,12 @@ function analyzeItem(args = [], isReanalyze = false) {
       path.join(itemRelDir, "business-logic.md"),
       replacements
     ),
+    ensureFileFromTemplate(
+      cwd,
+      path.join("project", "item", "ui-behavior.md"),
+      path.join(itemRelDir, "ui-behavior.md"),
+      replacements
+    ),
     ensureFileFromTemplate(cwd, path.join("project", "item", "data-flow.md"), path.join(itemRelDir, "data-flow.md"), replacements),
     ensureFileFromTemplate(cwd, path.join("project", "item", "sql.md"), path.join(itemRelDir, "sql.md"), replacements),
     ensureFileFromTemplate(
@@ -309,7 +316,7 @@ function analyzeItem(args = [], isReanalyze = false) {
 
   updateIndexRowStatus(cwd, itemId, complexityInfo.level, "分析中");
   printResultList("analyze", results);
-  console.log(`\n已建立獨立業務邏輯資料夾: ${itemRelDir}/（含自動產出的 backlog.md、sql.md、dead-code.md）`);
+  console.log(`\n已建立獨立業務邏輯資料夾: ${itemRelDir}/（含自動產出的 ui-behavior.md、backlog.md、sql.md、dead-code.md）`);
   console.log(`分析時間: ${now} | 目標 Git: ${targetInfo.gitBranch} @ ${targetInfo.gitCommit}`);
   console.log(`接下來可在 AI 對話框輸入 "refactor:analyze ${itemId}" (或 "raa ${itemId}") 進行深度分析。`);
 }
@@ -392,6 +399,7 @@ function commitItem(args = []) {
     }
 
     updateIndexRowStatus(cwd, itemId, finalComplexity, finalStatus);
+    aggregateDomainFlowsAndDeadCode(cwd, itemId);
     console.log(`[Commit] 已更新 project/index.md 中編號 ${itemId} 的狀態為: ${finalStatus}`);
   } else {
     console.log(`[Commit] 準備提交目前工作區分析結果...`);
@@ -547,6 +555,7 @@ function upgradeProject(args = []) {
     const itemFiles = [
       "analysis.md",
       "business-logic.md",
+      "ui-behavior.md",
       "data-flow.md",
       "sql.md",
       "dependencies.md",

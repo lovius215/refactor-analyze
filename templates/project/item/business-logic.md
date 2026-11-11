@@ -35,7 +35,21 @@
 
 ---
 
-## 4. 狀態轉換與例外處理 (State Transitions & Exception Handling)
+## 4. 狀態轉換、交易邊界與例外處理 (State Transitions, Transactions & Locking)
 
-- **狀態碼變更**：待分析（附檔案與行號來源）
-- **例外狀況與錯誤回傳**：待分析（附檔案與行號來源）
+- **狀態碼變更與生命週期**：待分析（附檔案與行號來源）
+- **交易邊界與併發控制 (Transaction & Locking)**：
+  - **資料庫交易範圍 (Transaction Scope)**：*(待 AI 分析填寫：如有 `@Transactional` 涵蓋哪些 Service/DAO 方法與 Table；若無交易保護則記錄技術債)*
+  - **併發控制與鎖定機制 (Concurrency Control)**：*(待 AI 分析填寫：如樂觀鎖 `VERSION` 欄位、悲觀鎖 `FOR UPDATE`、分散式鎖或無鎖併發風險)*
+- **例外狀況、Rollback 與補償機制**：待分析（失敗時之回滾範圍與錯誤回傳，附檔案與行號來源）
+
+---
+
+## 5. 重構驗收測試情境 (Acceptance Test Scenarios — Given / When / Then)
+
+> 💡 供接手重構的工程師與 QA 撰寫自動化測試（Unit/Integration Tests），以舊系統真實邏輯作為重構驗收準則。
+
+| 情境編號 | 測試案例名稱 / 目的 | 前置條件 (Given) | 觸發動作與輸入參數 (When) | 預期結果、狀態碼與 DB 變更 (Then) | 對應規則編號 (`BR-xx` / `VAL-xx`) |
+|---|---|---|---|---|---|
+| `TC-01` | *(待 AI 填寫：正向核心業務成功情境)* | - | - | - | - |
+| `TC-02` | *(待 AI 填寫：邊界值或例外檢核阻擋情境)* | - | - | - | - |

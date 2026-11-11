@@ -13,11 +13,22 @@ const DB_REF_REGEX = /(?:project\/system\/)?db\/([a-zA-Z0-9_.-]+\.md)/g;
 
 function extractCitationsFromText(text, docName) {
   const citations = [];
+  const nonBlockquoteText = text
+    .split("\n")
+    .filter((line) => !line.trim().startsWith(">"))
+    .join("\n");
   let match;
   CITATION_REGEX.lastIndex = 0;
-  while ((match = CITATION_REGEX.exec(text)) !== null) {
+  while ((match = CITATION_REGEX.exec(nonBlockquoteText)) !== null) {
     const filePath = match[1].trim();
-    if (filePath.includes("{{") || filePath.startsWith("path/to/") || filePath === "src/service/OrderService.java") {
+    if (
+      filePath.includes("{{") ||
+      filePath.startsWith("path/to/") ||
+      filePath === "src/service/OrderService.java" ||
+      filePath === "src/views/OrderForm.vue" ||
+      filePath === "OrderEditForm.cs" ||
+      filePath === "order_edit.jsp"
+    ) {
       continue;
     }
     const startLine = parseInt(match[2], 10);
@@ -76,6 +87,7 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
   const coreDocs = [
     "analysis.md",
     "business-logic.md",
+    "ui-behavior.md",
     "data-flow.md",
     "sql.md",
     "dependencies.md",

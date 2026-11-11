@@ -23,7 +23,7 @@ description: 用 init、scandb、analyze <編號>、reanalyze <編號>、commit 
 |---|---|---|---|
 | `refactor:init [路徑]` | `rai` | `refactor-analyze init` | **初始化與產出系統大概**：確認語言（`zh-TW`/`zh-CN`/`en`/`ja`/`ko`）、詢問目標系統路徑、檢查工作區與目標系統 Git 狀態並**詢問是否需要向 remote 對齊**，接著產出 `project/system/` 與分類編號清單 `project/index.md`。 |
 | `refactor:scandb` | `ras` | `refactor-analyze scandb` | **連結資料庫掃描欄位**：呼叫本機 CLI `refactor-analyze scandb` 讀取 `project/system/db-connection.md`（**AI 嚴禁讀取或輸出密碼至對話框**），支援 SQLite、MySQL/MariaDB、PostgreSQL、SQL Server (`sqlcmd`)、Oracle (`sqlplus`) 與獨立 SSH ControlMaster 跳板機通道，強制以**唯讀 Session** 抓取所有 Table、欄位、PK/FK、Index、註解、View、Stored Procedure 與 Trigger，產出 `project/system/db-schema.md` 與 `project/system/db/<table>.md`。 |
-| `refactor:analyze <編號>` | `raa` | `refactor-analyze analyze <編號>` | **依編號分析業務邏輯**：依 `project/index.md` 的編號新建 `project/<編號>/` 資料夾，從進入點深入分析並產出 `analysis.md`、`business-logic.md`、`data-flow.md`、`sql.md`、`dependencies.md`、`dead-code.md`，並**自動產出 `backlog.md`**。 |
+| `refactor:analyze <編號>` | `raa` | `refactor-analyze analyze <編號>` | **依編號分析業務邏輯**：依 `project/index.md` 的編號新建 `project/<編號>/` 資料夾，從進入點深入分析並產出 `analysis.md`、`business-logic.md`、`ui-behavior.md`、`data-flow.md`、`sql.md`、`dependencies.md`、`dead-code.md`，並**自動產出 `backlog.md`**。 |
 | `refactor:reanalyze <編號>` | `rar` | `refactor-analyze reanalyze <編號>` | **重新分析單一編號**：讀取 `project/<編號>/backlog.md` 補充內容與目標系統最新 Git 版本/程式碼，**再分析一次**並更新 `project/<編號>/` 內所有文件。 |
 | `refactor:verify [編號]` | `rav` | `refactor-analyze verify [編號]` | **0-Token 驗證來源與版本飄移**：驗證 `project/<編號>/` 內所有 `` `<file>#L<start>-L<end>` `` 原始碼檔案與行號是否真實存在，並檢查目標系統 Git Commit 是否改版導致行號偏移。 |
 | `refactor:commit [編號]` | `rac` | `refactor-analyze commit [編號]` | **確認歸檔與 Git 同步**：先執行 `verify` 確認無幻覺引用，再更新 `project/index.md` 狀態與複雜度、匯總至 `domain-flows.md` 與 `system/dead-code.md`、自動建立 Git commit；若有 remote 則自動 sync，**CLI 遇衝突時安全停止不破壞檔案，由 AI (`rac`) 進行語意合併後再 commit 與 sync**。 |
@@ -73,7 +73,7 @@ description: 用 init、scandb、analyze <編號>、reanalyze <編號>、commit 
    - 順著進入點往下追蹤呼叫鏈時，若遇到多處共用的核心商業元件或底層服務：
      - 若 `project/shared/<模組>.md` 已存在，直接引用其結論，**不重複讀取與重複展開分析**以節省 Token。
      - 若尚未建立且確認為核心共用模組，將其抽離記錄於 `project/shared/<模組>.md`。
-4. 在 `project/<編號>/` 下產出 7 份完整分析文件（嚴格遵守**禁止 AI 幻想鐵律**）：
+4. 在 `project/<編號>/` 下產出 8 份完整分析文件（嚴格遵守**禁止 AI 幻想鐵律**）：
    - **`analysis.md`**：
      - 記錄編號、功能名稱、分類、**執行分析的時間日期**、**目標系統 Git 分支（Branch）與 Commit Hash**。
      - 記錄**程式進入點**、**Request / Response / Input / Output Args**（若是批次程式則記錄進入點方法與啟動參數）。
@@ -82,6 +82,9 @@ description: 用 init、scandb、analyze <編號>、reanalyze <編號>、commit 
    - **`business-logic.md`**：
      - 梳理主流程、分支條件、狀態轉換、計算公式、驗證規則與權限控管。
      - **每一條規則強制標註原始碼檔案路徑與行號範圍**（如 `` `OrderService.java#L102-L145` ``）。
+   - **`ui-behavior.md`**：
+     - 梳理畫面欄位屬性、預設值、**動態顯隱/唯讀/禁用條件**、**下拉選單與選項控制項資料來源明細（`DropDownList` / `Select` / `ComboBox` / `Radio` 若取自資料庫，必須寫明對應 `db/<table>.md` 資料表、`Value`/`Text` 綁定欄位、`WHERE` 過濾條件、`ORDER BY` 排序、預設首項與級聯連動關係，並將 SQL 同步收錄於 `sql.md`）**、**畫面操作事件（`onLoad`/`onClick`/`onChange` 即時計算與跳轉動線）**、**畫面元件權限與資料遮罩**，以及**畫面與後端驗證規則對照矩陣（標註 `僅前端`/`僅後端`/`前後端皆有` 與不一致風險）**。
+     - 每一項畫面規則與驗證皆須標註前端/畫面檔案路徑與行號範圍（若為純後端 API 或批次作業則明確標示「`無畫面操作（純後端 API / 批次作業）`」）。
    - **`data-flow.md`**：
      - 梳理從 Input（Request/Args）$\to$ 內部物件轉換 $\to$ 讀寫 `project/system/db/<table>.md` 的哪些資料表與欄位（標註 `C/R/U/D`）$\to$ Output（Response）的完整資料流。
    - **`sql.md`**：
