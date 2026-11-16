@@ -50,17 +50,18 @@ project/
     db-schema.md               # 6. 資料庫總覽索引（由 scandb 實際抓取之資料表清單、View、Stored Procedure、Trigger 列表）
     db/                        # 7. 各資料表欄位明細（依 Table 拆檔以節省 Token，記錄欄位名稱、型別、PK/FK、註解）
       <table>.md
+    domain-dictionary.md       # 8. 全域領域業務知識辭典（由各編號 commit 自動自 backlog.md 匯總「已釐清」之全系統通用憑證）
   shared/                      # 共用邏輯抽離區（避免多編號重複分析燒 Token）
     <shared-module>.md         # 多支 API/Batch 共用的核心商業元件或底層服務分析
   001/                         # 第二階段：以「編號」命名的獨立業務邏輯資料夾（analyze 001 / reanalyze 001 產出，commit 001 確認歸檔）
     analysis.md                # 1. 分析（執行日期時間、Git 分支與 Hash、進入點與 Request/Response/Input/Output Args、涉及檔案、複雜度、技術債與重構建議 To-Be Notes）
-    business-logic.md          # 2. 業務邏輯（商業規則、流程、狀態轉換、計算與驗證邏輯，必附檔案與行號來源）
+    business-logic.md          # 2. 業務邏輯（商業規則、流程、狀態轉換、計算與驗證邏輯，必附檔案與行號來源或業務憑證 BL-xx）
     ui-behavior.md             # 3. 畫面操作行為與驗證（畫面欄位動態顯隱/唯讀連動、事件觸發、元件權限與前後端驗證規則對照矩陣）
     data-flow.md               # 4. 資料流（Input -> 處理 -> 對應 system/db/ 的資料表與欄位讀寫 -> Output）
     sql.md                     # 5. SQL 與查詢邏輯整理（列出原始 SQL / MyBatis / ORM Query、檔案與行數、動態條件解析與優化建議）
     dependencies.md            # 6. 依賴關係（上下游模組、project/shared/ 共用元件引用、DB Table、外部 API 與套件依賴）
     dead-code.md               # 7. 死程式碼記錄（強制列出 Git 分支、Commit Hash、程式檔案名稱、行數、相關代碼）
-    backlog.md                 # 8. Backlog（自動產出不確定的業務邏輯、未知欄位定義、未明狀態碼）
+    backlog.md                 # 8. Backlog 與業務憑證庫（列管未知邏輯與結構化業務知識憑證 BL-xx，支援人為調查與規格書簽核拍板）
 ```
 
 ---
@@ -90,6 +91,8 @@ project/
    - 只有執行 `commit [編號]`（`rac`）時，才將確認後的狀態正式更新至 `project/index.md`，並自動建立本機 Git commit。
    - 若分析工作區有設定 Git remote，必須自動執行 sync（先拉取遠端再推送）。
    - 若同步時遇到 Git 衝突，AI 與 CLI 必須主動協助解析並合併衝突，**處理完成後再自動協助執行 commit 與 sync**。
+8. **業務知識憑證（Knowledge Voucher）與雙軌來源追溯**：
+   - 凡涉及人為訪談、官方規範文檔或實務業務拍板之邏輯，必須在 `project/<編號>/backlog.md` 建立結構化憑證並完成拍板（狀態為 `已釐清`、具備簽核人與結論），業務邏輯以 `` `[Human: ...]#BL-xx` `` 或 `` `[Doc: ...]#BL-xx` `` 引用；`commit` 時若屬全系統通用則自動匯總至 `project/system/domain-dictionary.md`，後續分析優先繼承。
 
 ---
 

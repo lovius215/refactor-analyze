@@ -608,14 +608,22 @@ function aggregateDomainDictionary(cwd, itemId) {
   const vouchersToPromote = [];
 
   for (const line of lines) {
-    if (!line.startsWith("|") || line.includes("憑證編號") || line.includes("---")) continue;
+    if (
+      !line.startsWith("|") ||
+      line.includes("憑證編號") ||
+      line.includes("憑證 ID") ||
+      line.includes("待確認問題") ||
+      line.includes("---")
+    ) {
+      continue;
+    }
     const parts = line
       .split("|")
       .map((p) => p.trim())
       .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
     if (parts.length < 10) continue;
     const id = parts[0].replace(/`/g, "").trim();
-    if (!id || id.includes("待分析") || id.includes("{{")) continue;
+    if (!id || id.includes("待分析") || id.includes("{{") || id.startsWith("*(")) continue;
     const type = parts[1].replace(/`/g, "").trim();
     const location = parts[2].replace(/`/g, "").trim();
     const question = parts[3].replace(/`/g, "").trim();

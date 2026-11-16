@@ -52,15 +52,16 @@
 
 | 阶段 | CLI 指令 | AI 对话指令 | 简写 | 说明 |
 |---|---|---|---|---|
-| **1. 初始化与系统概览** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [路径]` | `rai` | 建立工作区与 Git、确认语言、询问目标路径与是否向 remote 对齐，产出 `project/system/` 与分类编号清单 `project/index.md`。 |
+| **1. 初始化与系统概览** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [路径]` | `rai` | 建立工作区与 Git、确认语言、询问目标路径与是否向 remote 对齐，产出 `project/system/`、全域业务词典 `domain-dictionary.md` 与分类编号清单 `project/index.md`。 |
 | **2. 扫描数据库字段** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | 依据 `project/system/db-connection.md`（支持跳板机）实际连入数据库抓取所有字段与 Trigger，产出 `db-schema.md` 与 `db/<table>.md`。 |
-| **3. 分析单一编号** | `refactor-analyze analyze <编号>` | `refactor:analyze <编号>` | `raa` | 新建 `project/<编号>/` 文件夹，深入分析业务逻辑、**画面操作行为与验证（`ui-behavior.md`）**、数据流、SQL、依赖、死代码与复杂度，并**自动产出 `backlog.md`**。 |
-| **4. 重新分析单一编号** | `refactor-analyze reanalyze <编号>` | `refactor:reanalyze <编号>` | `rar` | 根据 `backlog.md` 补充内容或代码变更**再分析一次**，更新 `project/<编号>/` 所有文档。 |
-| **5. 0-Token 验证来源与飘移** | `refactor-analyze verify [编号]` | `refactor:verify [编号]` | `rav` | 本地 0-Token 核对所有 `#Lx-Ly` 源代码文件与行号是否真实存在，并检测目标系统 Git 改版飘移。 |
-| **6. 确认提交与远程同步** | `refactor-analyze commit [编号]` | `refactor:commit [编号]` | `rac` | 通过 `verify` 后更新 `project/index.md` 状态、自动 commit 到 Git；若有 remote 自动安全 sync（CLI 遇冲突安全停止不破坏文件，交由 AI `rac` 语义合并）。 |
-| **7. 导出 PDF 文档** | `refactor-analyze pdf [目标] [--merge] [--output ...]` *(或 `md2pdf`)* | `refactor:pdf [目标]` | `rap` | **0-Token 本地转换**：将指定的 `.md` 文件、编号文件夹（如 `001`）或整个 `project/` 转换为 `.pdf`（支持 `--merge` 合并为单一 PDF）。 |
-| **8. 更新现有分析项目** | `refactor-analyze upgrade [--dry-run]` *(或 `update`)* | `refactor:upgrade` | `rau` | 更新现有分析项目的 `AGENTS.md`、`skills/`、`rules/` 与缺失模板（保留既有语言与分析内容）。 |
-| **9. 检查与状态** | `refactor-analyze status` / `check` / `doctor` | - | - | 查看清单进度与检查必要文件。 |
+| **3. 分析单一编号** | `refactor-analyze analyze <编号>` | `refactor:analyze <编号>` | `raa` | 优先继承 `domain-dictionary.md`，新建 `project/<编号>/` 文件夹深入分析业务逻辑、**画面操作行为与验证（`ui-behavior.md`）**、数据流、SQL、依赖、死代码，并**自动建立结构化业务凭证库 `backlog.md`**。 |
+| **4. 重新分析单一编号** | `refactor-analyze reanalyze <编号>` | `refactor:reanalyze <编号>` | `rar` | 根据访谈调查与 `backlog.md` 凭证签核结果**再分析一次**，将 `[Human: ...]#BL-xx` 引用正式更新至文档。 |
+| **5. 0-Token 双轨验证与飘移** | `refactor-analyze verify [编号]` | `refactor:verify [编号]` | `rav` | 本地 0-Token 双轨核对 `#Lx-Ly` 源代码行号及 `BL-xx` 业务凭证有效性，并检测目标系统 Git 改版飘移。 |
+| **6. 确认提交与远程同步** | `refactor-analyze commit [编号]` | `refactor:commit [编号]` | `rac` | 通过 `verify` 后更新 `project/index.md` 状态、**自动提取全系统通用凭证汇总至 `domain-dictionary.md`**、自动 commit 到 Git；若有 remote 自动安全 sync。 |
+| **7. 产出重构测试治具** | `refactor-analyze gen-test <编号> [--framework junit\|jest\|pytest]` *(或 `harness`)* | `refactor:gen-test <编号>` | `rag` | **0-Token 测试治具生成**：依据 Given/When/Then 验收情境自动生成 JUnit 5、Jest 或 PyTest 测试代码骨架（存於 `harness/`）。 |
+| **8. 导出 PDF 文档** | `refactor-analyze pdf [目标] [--merge] [--output ...]` *(或 `md2pdf`)* | `refactor:pdf [目标]` | `rap` | **0-Token 本地转换**：将指定的 `.md` 文件、编号文件夹（如 `001`）或整个 `project/` 转换为 `.pdf`（支持 `--merge` 合并为单一 PDF）。 |
+| **9. 更新现有分析项目** | `refactor-analyze upgrade [--dry-run]` *(或 `update`)* | `refactor:upgrade` | `rau` | 更新现有分析项目的 `AGENTS.md`、`skills/`、`rules/` 与缺失模板（保留既有语言与分析内容）。 |
+| **10. 检查与状态** | `refactor-analyze status` / `check` / `doctor` | - | - | 查看清单进度与检查必要文件。 |
 
 ---
 

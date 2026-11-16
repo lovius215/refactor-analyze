@@ -392,9 +392,25 @@ function commitItem(args = []) {
       finalStatus = "待確認 (需補齊來源引用)";
     } else if (fs.existsSync(backlogPath)) {
       const backlogContent = fs.readFileSync(backlogPath, "utf8");
-      const pendingLines = backlogContent
-        .split("\n")
-        .filter((l) => l.startsWith("|") && l.includes("待確認") && !l.includes("待分析"));
+      const pendingLines = backlogContent.split("\n").filter((l) => {
+        if (
+          !l.startsWith("|") ||
+          l.includes("憑證 ID") ||
+          l.includes("憑證編號") ||
+          l.includes("待確認問題") ||
+          l.includes("---") ||
+          l.includes("待分析")
+        ) {
+          return false;
+        }
+        const parts = l
+          .split("|")
+          .map((p) => p.trim())
+          .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+        if (parts.length < 2) return false;
+        const statusCell = parts[parts.length - 1];
+        return statusCell.includes("待確認");
+      });
       if (pendingLines.length > 0) {
         finalStatus = "待確認 (Backlog)";
       }
@@ -555,6 +571,7 @@ function upgradeProject(args = []) {
     path.join("project", "system", "architecture.md"),
     path.join("project", "system", "domain-flows.md"),
     path.join("project", "system", "dead-code.md"),
+    path.join("project", "system", "domain-dictionary.md"),
     path.join("project", "system", "db-schema.md"),
     path.join("project", "shared", "README.md")
   ];
@@ -627,6 +644,7 @@ function checkRequiredPaths(heading) {
     path.join("project", "system", "architecture.md"),
     path.join("project", "system", "domain-flows.md"),
     path.join("project", "system", "dead-code.md"),
+    path.join("project", "system", "domain-dictionary.md"),
     path.join("project", "system", "db-schema.md")
   ];
 

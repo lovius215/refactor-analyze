@@ -60,15 +60,16 @@
 
 | 段階 | CLI コマンド | AI チャットコマンド | 短縮形 | 説明 |
 |---|---|---|---|---|
-| **1. 初期化と全体概要** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [パス]` | `rai` | ワークスペースと Git を構築、言語確認、対象システムパスとリモート同期確認、`project/system/` と番号付き一覧 `project/index.md` を生成。 |
+| **1. 初期化と全体概要** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [パス]` | `rai` | ワークスペースと Git を構築、言語確認、対象システムパスとリモート同期確認、`project/system/`、共通業務辞書 `domain-dictionary.md`、番号付き一覧 `project/index.md` を生成。 |
 | **2. DB カラムスキャン** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | `db-connection.md`（踏み台対応）に基づき DB から全テーブル・カラム・Trigger を取得し、`db-schema.md` と `db/<table>.md` を生成。 |
-| **3. 番号別詳細分析** | `refactor-analyze analyze <番号>` | `refactor:analyze <番号>` | `raa` | `project/<番号>/` フォルダを作成し、業務ロジック、**画面操作挙動と入力検証（`ui-behavior.md`）**、データフロー、SQL、依存関係、デッドコード、複雑度を分析し **`backlog.md` を自動生成**。 |
-| **4. 番号別再分析** | `refactor-analyze reanalyze <番号>` | `refactor:reanalyze <番号>` | `rar` | `backlog.md` の追記内容やコード更新を元に**再分析**し、`project/<番号>/` 内の全ファイルを更新。 |
-| **5. 0-Token 根拠＆ドリフト検証** | `refactor-analyze verify [番号]` | `refactor:verify [番号]` | `rav` | ローカル 0-Token で `#Lx-Ly` のファイルと行番号の実在性を検証し、対象システムの Git コミット変更による行番号ずれを検出。 |
-| **6. 確定コミット＆同期** | `refactor-analyze commit [番号]` | `refactor:commit [番号]` | `rac` | `verify` 通過後に `project/index.md` の状態を更新し、Git コミットと安全なリモート同期を実行（競合時はファイルを破壊せず安全に停止）。 |
-| **7. PDF エクスポート** | `refactor-analyze pdf [対象] [--merge] [--output ...]` *(または `md2pdf`)* | `refactor:pdf [対象]` | `rap` | **0-Token ローカル変換**：指定の `.md` ファイル、番号フォルダ（例: `001`）、または `project/` 全体を `.pdf` に変換（`--merge` で単一 PDF へ結合可能）。 |
-| **8. 既存プロジェクト更新** | `refactor-analyze upgrade [--dry-run]` *(または `update`)* | `refactor:upgrade` | `rau` | 既存の分析ワークスペースの言語設定と分析内容を維持したまま、ルールと不足テンプレートを最新版に更新。 |
-| **9. 状態確認** | `refactor-analyze status` / `check` / `doctor` | - | - | 分析進捗や必須ファイルの整合性をチェック。 |
+| **3. 番号別詳細分析** | `refactor-analyze analyze <番号>` | `refactor:analyze <番号>` | `raa` | `domain-dictionary.md` を優先継承し、`project/<番号>/` を作成して業務ロジック、**画面操作挙動と入力検証（`ui-behavior.md`）**、データフロー、SQL、依存関係、デッドコードを分析し、**構造化証跡 `backlog.md` を自動生成**。 |
+| **4. 番号別再分析** | `refactor-analyze reanalyze <番号>` | `refactor:reanalyze <番号>` | `rar` | ヒアリングや仕様書で承認された `backlog.md` の証跡（`[Human: ...]#BL-xx`）を反映して**再分析**し、全ファイルを更新。 |
+| **5. 0-Token 二重根拠＆ドリフト検証** | `refactor-analyze verify [番号]` | `refactor:verify [番号]` | `rav` | ローカル 0-Token で `#Lx-Ly` の行番号と `BL-xx` 証跡の承認状態を検証し、対象システムの Git 変更による行番号ずれを検出。 |
+| **6. 確定コミット＆同期** | `refactor-analyze commit [番号]` | `refactor:commit [番号]` | `rac` | `verify` 通過後に `project/index.md` 更新、**全体共通証跡の `domain-dictionary.md` への自動昇格**、Git コミットと安全なリモート同期を実行。 |
+| **7. テストハーネス生成** | `refactor-analyze gen-test <番号> [--framework junit\|jest\|pytest]` *(または `harness`)* | `refactor:gen-test <番号>` | `rag` | **0-Token テスト生成**：Given/When/Then シナリオから JUnit 5 / Jest / PyTest のテスト骨子を `harness/` に自動生成。 |
+| **8. PDF エクスポート** | `refactor-analyze pdf [対象] [--merge] [--output ...]` *(または `md2pdf`)* | `refactor:pdf [対象]` | `rap` | **0-Token ローカル変換**：指定の `.md` ファイル、番号フォルダ（例: `001`）、または `project/` 全体を `.pdf` に変換（`--merge` で単一 PDF へ結合可能）。 |
+| **9. 既存プロジェクト更新** | `refactor-analyze upgrade [--dry-run]` *(または `update`)* | `refactor:upgrade` | `rau` | 既存の分析ワークスペースの言語設定と分析内容を維持したまま、ルールと不足テンプレートを最新版に更新。 |
+| **10. 状態確認** | `refactor-analyze status` / `check` / `doctor` | - | - | 分析進捗や必須ファイルの整合性をチェック。 |
 
 ---
 

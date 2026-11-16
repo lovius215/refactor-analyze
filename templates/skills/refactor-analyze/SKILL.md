@@ -69,8 +69,9 @@ description: 用 init、scandb、analyze <編號>、reanalyze <編號>、commit 
 
 1. 從 `project/index.md` 查找該 `<編號>`（如 `001`）對應的功能/API 名稱、所屬分類與**程式的位置（進入點）**。
 2. 新建以編號命名的獨立資料夾 **`project/<編號>/`**（可先執行 `refactor-analyze analyze <編號>` 建立模板並帶入 Git 與時間元資料）。
-3. **共用邏輯去重檢查（`project/shared/`）**：
-   - 順著進入點往下追蹤呼叫鏈時，若遇到多處共用的核心商業元件或底層服務：
+3. **全域辭典繼承與共用邏輯去重檢查**：
+   - **優先查閱 `project/system/domain-dictionary.md`**：遇到縮寫欄位或狀態碼時，若辭典已收錄，**直接繼承其已拍板定義**，嚴禁重複提問。
+   - **共用邏輯去重（`project/shared/`）**：順著進入點往下追蹤呼叫鏈時，若遇到多處共用的核心商業元件或底層服務：
      - 若 `project/shared/<模組>.md` 已存在，直接引用其結論，**不重複讀取與重複展開分析**以節省 Token。
      - 若尚未建立且確認為核心共用模組，將其抽離記錄於 `project/shared/<模組>.md`。
 4. 在 `project/<編號>/` 下產出 8 份完整分析文件（嚴格遵守**禁止 AI 幻想鐵律**）：
@@ -81,7 +82,7 @@ description: 用 init、scandb、analyze <編號>、reanalyze <編號>、commit 
      - 記錄 **技術債與重構改善建議（To-Be Refactoring Notes）**，明確區分「現行實作（As-Is）」與「重構時應改善之處（如 N+1 查詢、硬編碼、缺乏 Transaction 等）」，防止重構時照抄爛設計。
    - **`business-logic.md`**：
      - 梳理主流程、分支條件、狀態轉換、計算公式、驗證規則與權限控管。
-     - **每一條規則強制標註原始碼檔案路徑與行號範圍**（如 `` `OrderService.java#L102-L145` ``）。
+     - **每一條規則強制標註來源依據**：可為原始碼檔案路徑與行號（如 `` `OrderService.java#L102-L145` ``）或已立案並簽核拍板之業務知識憑證（如 `` `[Human: 訪談維運主管]#BL-01` ``）。
    - **`ui-behavior.md`**：
      - 梳理畫面欄位屬性、預設值、**動態顯隱/唯讀/禁用條件**、**下拉選單與選項控制項資料來源明細（`DropDownList` / `Select` / `ComboBox` / `Radio` 若取自資料庫，必須寫明對應 `db/<table>.md` 資料表、`Value`/`Text` 綁定欄位、`WHERE` 過濾條件、`ORDER BY` 排序、預設首項與級聯連動關係，並將 SQL 同步收錄於 `sql.md`）**、**畫面操作事件（`onLoad`/`onClick`/`onChange` 即時計算與跳轉動線）**、**畫面元件權限與資料遮罩**，以及**畫面與後端驗證規則對照矩陣（標註 `僅前端`/`僅後端`/`前後端皆有` 與不一致風險）**。
      - 每一項畫面規則與驗證皆須標註前端/畫面檔案路徑與行號範圍（若為純後端 API 或批次作業則明確標示「`無畫面操作（純後端 API / 批次作業）`」）。
@@ -95,24 +96,25 @@ description: 用 init、scandb、analyze <編號>、reanalyze <編號>、commit 
    - **`dead-code.md`**：
      - 列出該功能呼叫鏈內發現的死程式碼（被註解的舊代碼、永遠進不去的條件分支、未使用的私有方法）。
      - **強制列出：Git 分支、Git Commit Hash、程式檔案名稱、行數範圍、判定原因與相關代碼片段**。
-   - **`backlog.md`（自動產出）**：
-     - 自動將分析過程中發現**不確定的業務邏輯、無註解之縮寫欄位定義、未知狀態碼（Magic Numbers）或缺少的外部規格**逐項列出，標記為 `待確認`。
+   - **`backlog.md`（結構化業務憑證庫）**：
+     - 自動將分析過程中發現**不確定的業務邏輯、無註解之縮寫欄位定義、未知狀態碼（Magic Numbers）或缺少的外部規格**以結構化憑證立案（`BL-01`、`BL-02`），記錄位置、疑問、適用範圍（`全系統通用` 或 `單一編號: xx`），預設標記為 `待確認`。
 
 ---
 
-### 4. `refactor:reanalyze <編號>` (`rar <編號>`) — 補充 Backlog 後再分析一次
+### 4. `refactor:reanalyze <編號>` (`rar <編號>`) — 補充 Backlog 憑證拍板後再分析一次
 
-1. 讀取 `project/<編號>/backlog.md` 中使用者已補充或回答的業務邏輯與欄位定義，並檢查目標系統是否有新的 Git commit 或程式碼變更。
-2. 結合補充資訊與最新程式碼**再分析一次**，將已釐清的規則與欄位定義同步更新回 `analysis.md`、`business-logic.md`、`data-flow.md`、`sql.md`、`dependencies.md`、`dead-code.md`，並更新**執行分析的時間日期**與**目標 Git 分支/Hash**。
-3. 將 `backlog.md` 中已解決的項目狀態改為 `已釐清`。
+1. 讀取 `project/<編號>/backlog.md` 中使用者已調查補充之結論、佐證依據、簽核拍板人，並確認狀態更新為 `已釐清`。
+2. 結合補充憑證與最新程式碼**再分析一次**，將已釐清的規則與欄位定義正式引用寫入 `business-logic.md`（如 `` `[Human: 王小明]#BL-01` ``），同步更新 `analysis.md`、`data-flow.md`、`sql.md` 等，並更新執行分析時間與 Git 分支/Hash。
 
 ---
 
-### 5. `refactor:commit [編號]` (`rac [編號]`) — 確認歸檔、更新狀態與 Git 自動 Commit & Sync
+### 5. `refactor:commit [編號]` (`rac [編號]`) — 確認歸檔、更新狀態、全域辭典匯總與 Git 自動 Commit & Sync
 
-1. 使用者確認分析結果後，正式更新 `project/index.md` 對應編號的 **複雜度** 與 **目前的狀態**（若 `backlog.md` 全數釐清則設為 `已完成`，若仍有未決項則設為 `待確認`）。
-2. 將該編號涉及的跨功能狀態轉換與資料表讀寫關係匯總更新至 `project/system/domain-flows.md`，並將新發現的死程式碼同步匯總至 `project/system/dead-code.md`。
-3. 執行 `refactor-analyze commit [編號]`（或由 AI 執行 Git 歸檔流程）：
+1. 先自動執行 `refactor-analyze verify` 驗證原始碼行號引用與業務憑證（`BL-xx`）簽核有效性。
+2. 使用者確認分析結果後，正式更新 `project/index.md` 對應編號的 **複雜度** 與 **目前的狀態**（若 `backlog.md` 全數釐清則設為 `已完成`，若仍有未決項則設為 `待確認`）。
+3. 將該編號涉及的跨功能狀態轉換與資料表讀寫關係匯總更新至 `project/system/domain-flows.md`，並將新發現的死程式碼同步匯總至 `project/system/dead-code.md`。
+4. **自動匯總全域辭典**：自動掃描 `backlog.md`，將標記為 `已釐清` 且範圍為 `全系統通用` 之業務憑證自動收錄至 `project/system/domain-dictionary.md`，供後續所有編號直接繼承。
+5. 執行 `refactor-analyze commit [編號]`（或由 AI 執行 Git 歸檔流程）：
    - 確保 `project/system/db-connection.md` 未被加入暫存區（保護帳密安全）。
    - 自動建立本機 Git commit（格式：`docs(<編號>): <功能名稱> - 完成重構分析歸檔`）。
    - 若分析工作區 Git 有設定 remote（如 `origin`），**自動執行 sync**（先拉取遠端最新狀態再推送至 remote）。

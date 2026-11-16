@@ -11,9 +11,14 @@ function sanitizeIdentifier(name) {
     .join("");
 }
 
-function sanitizeMethodName(name) {
+function sanitizeMethodName(name, fallbackId = "case") {
   const pascal = sanitizeIdentifier(name);
-  return pascal ? pascal.charAt(0).toLowerCase() + pascal.slice(1) : "testCase";
+  if (pascal) {
+    const camel = pascal.charAt(0).toLowerCase() + pascal.slice(1);
+    return /^[0-9]/.test(camel) ? `test_${camel}` : camel;
+  }
+  const cleanId = String(fallbackId || "case").replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
+  return `test_${cleanId}`;
 }
 
 function parseTestCasesFromBusinessLogic(content) {
@@ -160,7 +165,7 @@ function generateJUnitHarness(itemId, meta, testCases) {
   const className = sanitizeIdentifier(meta.featureName) || `Feature${itemId}`;
   const testMethods = testCases
     .map((tc) => {
-      const methodName = sanitizeMethodName(tc.name || tc.id);
+      const methodName = sanitizeMethodName(tc.name, tc.id);
       return `    /**
      * [${tc.id}] ${tc.name}
      * 對應規則: ${tc.ruleRef}
@@ -255,7 +260,7 @@ ${testBlocks}
 function generatePytestHarness(itemId, meta, testCases) {
   const testFunctions = testCases
     .map((tc) => {
-      const funcName = sanitizeMethodName(tc.name || tc.id)
+      const funcName = sanitizeMethodName(tc.name, tc.id)
         .replace(/([A-Z])/g, "_$1")
         .toLowerCase();
       return `def test_${funcName}():

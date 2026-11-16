@@ -328,7 +328,9 @@ test("5. voucher verification detects missing/unconfirmed vouchers, passes confi
     fs.writeFileSync(path.join(itemDir, "dependencies.md"), "# 依賴\n無特殊外部依賴\n", "utf8");
     fs.writeFileSync(path.join(itemDir, "dead-code.md"), "# 死程式碼\n無死程式碼\n", "utf8");
 
-    // 1. Business logic cites BL-01, but backlog has BL-01 as 待確認
+    // 1. Business logic cites BL-01, but backlog uses real template header and BL-01 is 待確認
+    const realHeader =
+      "| 憑證 ID | 類型 (`業務規則`/`欄位定義`/`狀態碼`/`公式`) | 程式檔案或資料表位置 (含行號) | 待確認問題與現況描述 | 人為調查結論與業務定義 | 證據來源類型 (`Human`/`Doc`/`DB`/`Decision`) | 佐證依據 (會議記錄/文件章節/驗證SQL) | 拍板人 / 簽核人 | 影響範圍 (`全系統通用`/`單一編號`) | 狀態 (`待確認`/`已釐清`) |";
     fs.writeFileSync(
       path.join(itemDir, "business-logic.md"),
       "# 業務邏輯\n- 訂單超時取消規則：`[Human: 訪談維運主管]#BL-01` 當超過 30 分鐘未付款時自動標記為取消。\n",
@@ -337,7 +339,7 @@ test("5. voucher verification detects missing/unconfirmed vouchers, passes confi
     fs.writeFileSync(
       path.join(itemDir, "backlog.md"),
       `# Backlog
-| 憑證編號 | 類型 | 程式/資料庫位置 | 疑問與待釐清事項 | 調查結果與拍板決策 | 來源類型 | 佐證依據/訪談記錄 | 拍板人 | 適用範圍 | 狀態 |
+${realHeader}
 |---|---|---|---|---|---|---|---|---|---|
 | \`BL-01\` | 狀態碼/魔術數字 | ORDERS.STS_CD | STS_CD = '9' 含義為何 | 待確認 | Human/Interview | 會議訪談 | - | 全系統通用 | 待確認 |
 `,
@@ -348,11 +350,25 @@ test("5. voucher verification detects missing/unconfirmed vouchers, passes confi
     assert.notEqual(verifyFail.status, 0, "verify should fail on unconfirmed voucher");
     assert.match(verifyFail.stdout, /尚未釐清的 Backlog 業務憑證/);
 
+    // 1b. Marked 已釐清, but signoff is placeholder -> should still fail verify
+    fs.writeFileSync(
+      path.join(itemDir, "backlog.md"),
+      `# Backlog
+${realHeader}
+|---|---|---|---|---|---|---|---|---|---|
+| \`BL-01\` | 狀態碼/魔術數字 | ORDERS.STS_CD | STS_CD = '9' 含義為何 | 經確認代表系統逾時自動取消 | Human/Interview | 會議記錄 | *(如: 業務部 王經理)* | 全系統通用 | 已釐清 |
+`,
+      "utf8"
+    );
+    const verifyPlaceholderFail = runCli(workDir, ["verify", "001"]);
+    assert.notEqual(verifyPlaceholderFail.status, 0, "verify should reject placeholder signoff");
+    assert.match(verifyPlaceholderFail.stdout, /缺乏拍板人或決策結論/);
+
     // 2. Resolve voucher with signoff, conclusion, and mark as 已釐清
     fs.writeFileSync(
       path.join(itemDir, "backlog.md"),
       `# Backlog
-| 憑證編號 | 類型 | 程式/資料庫位置 | 疑問與待釐清事項 | 調查結果與拍板決策 | 來源類型 | 佐證依據/訪談記錄 | 拍板人 | 適用範圍 | 狀態 |
+${realHeader}
 |---|---|---|---|---|---|---|---|---|---|
 | \`BL-01\` | 狀態碼/魔術數字 | ORDERS.STS_CD | STS_CD = '9' 含義為何 | 經確認代表系統逾時自動取消 | Human/Interview | 2026-03-31 運營產銷週會記錄 | 王小明 (PM) | 全系統通用 | 已釐清 |
 `,
@@ -363,15 +379,65 @@ test("5. voucher verification detects missing/unconfirmed vouchers, passes confi
     assert.equal(verifyPass.status, 0, `verify should pass on confirmed voucher: ${verifyPass.stdout}`);
     assert.match(verifyPass.stdout, /1 處業務憑證/);
 
-    // 3. Commit item 001 -> should auto-promote BL-01 to project/system/domain-dictionary.md
+    // 3. Commit item 001 -> should auto-promote BL-01 to domain-dictionary.md without header pollution, and mark 已完成
     const commitRes = runCli(workDir, ["commit", "001"]);
     assert.equal(commitRes.status, 0, `commit should succeed: ${commitRes.stderr}`);
+    assert.match(commitRes.stdout, /狀態為: 已完成/);
 
     const dictContent = fs.readFileSync(path.join(workDir, "project", "system", "domain-dictionary.md"), "utf8");
     assert.match(dictContent, /BL-01/);
     assert.match(dictContent, /經確認代表系統逾時自動取消/);
     assert.match(dictContent, /王小明 \(PM\)/);
     assert.match(dictContent, /`001`/);
+    assert.doesNotMatch(dictContent, /`憑證 ID`/);
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test("6. upgrade restores missing domain-dictionary.md, doctor validates workspace, and gen-test handles non-ASCII test names uniquely", () => {
+  const workDir = makeTempDir("ra-upgrade-");
+  try {
+    runCli(workDir, ["init"]);
+    const dictPath = path.join(workDir, "project", "system", "domain-dictionary.md");
+    fs.rmSync(dictPath);
+    assert.equal(fs.existsSync(dictPath), false);
+
+    // doctor should fail when domain-dictionary.md is missing
+    const docFail = runCli(workDir, ["doctor"]);
+    assert.notEqual(docFail.status, 0);
+    assert.match(docFail.stdout, /MISSING .*domain-dictionary\.md/);
+
+    // upgrade should restore missing domain-dictionary.md
+    const upgRes = runCli(workDir, ["upgrade"]);
+    assert.equal(upgRes.status, 0, `upgrade failed: ${upgRes.stderr}`);
+    assert.equal(fs.existsSync(dictPath), true);
+
+    const docPass = runCli(workDir, ["doctor"]);
+    assert.equal(docPass.status, 0, `doctor failed: ${docPass.stdout}`);
+
+    // gen-test with Chinese test names should produce unique method/function names
+    runCli(workDir, ["analyze", "001"]);
+    const itemDir = path.join(workDir, "project", "001");
+    fs.writeFileSync(
+      path.join(itemDir, "business-logic.md"),
+      `# 業務邏輯
+## 重構驗收測試情境 (Acceptance Test Scenarios)
+| 情境編號 | 情境名稱 | Given (前置條件) | When (觸發動作) | Then (預期結果) | 對應規則 |
+|---|---|---|---|---|---|
+| \`TC-01\` | 建立訂單成功 | 有效購物車 | 呼叫建立訂單 | 回傳成功 | \`BR-01\` |
+| \`TC-02\` | 餘額不足失敗 | 餘額為零 | 呼叫建立訂單 | 拋出餘額不足例外 | \`VAL-01\` |
+`,
+      "utf8"
+    );
+
+    const junitRes = runCli(workDir, ["gen-test", "001", "--framework", "junit"]);
+    assert.equal(junitRes.status, 0);
+    const harnessDir = path.join(itemDir, "harness");
+    const javaFile = fs.readdirSync(harnessDir).find((f) => f.endsWith("Test.java"));
+    const javaCode = fs.readFileSync(path.join(harnessDir, javaFile), "utf8");
+    assert.match(javaCode, /void test_tc_01\(\)/);
+    assert.match(javaCode, /void test_tc_02\(\)/);
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
   }

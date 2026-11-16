@@ -206,6 +206,14 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
     }
   }
 
+  const isPlaceholderOrEmpty = (val) =>
+    !val ||
+    val === "-" ||
+    val.startsWith("*(") ||
+    val.includes("待確認") ||
+    val.includes("待填寫") ||
+    val.includes("待分析");
+
   // Verify business knowledge vouchers against backlog.md
   for (const v of allVouchers) {
     const bv = knownVouchers.get(v.voucherId);
@@ -217,7 +225,7 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
       errors.push(
         `[${v.docName}] 引用了尚未釐清的 Backlog 業務憑證 ${v.raw}（狀態為：${bv.status || "待確認"}，尚未由人工拍板確認）`
       );
-    } else if (!bv.signoff || !bv.conclusion) {
+    } else if (isPlaceholderOrEmpty(bv.signoff) || isPlaceholderOrEmpty(bv.conclusion)) {
       errors.push(
         `[${v.docName}] 引用之 Backlog 業務憑證 ${v.raw} 缺乏拍板人或決策結論，無法作為有效來源依據`
       );
