@@ -1,6 +1,6 @@
 {
   "name": "@loviusc/refactor-analyze",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "AI-assisted legacy system refactoring analysis workspace CLI (supports Gemini, Claude, GPT/Codex)",
   "publishConfig": {
     "access": "public",
