@@ -247,3 +247,63 @@ test("3. commit stops safely on Git merge conflict instead of corrupting files",
     fs.rmSync(otherCloneDir, { recursive: true, force: true });
   }
 });
+
+test("4. gen-test generates runnable test harness code for JUnit, Jest, and PyTest", () => {
+  const workDir = makeTempDir("ra-harness-");
+
+  try {
+    runCli(workDir, ["init"]);
+    const indexPath = path.join(workDir, "project", "index.md");
+    fs.writeFileSync(
+      indexPath,
+      "# Index\n| `001` | Create Order API | `src/OrderService.js#createOrder` | 低 | 待分析 |\n",
+      "utf8"
+    );
+
+    runCli(workDir, ["analyze", "001"]);
+    const bizPath = path.join(workDir, "project", "001", "business-logic.md");
+    fs.writeFileSync(
+      bizPath,
+      `# Business Logic
+## 5. 重構驗收測試情境 (Acceptance Test Scenarios — Given / When / Then)
+| 情境編號 | 測試案例名稱 / 目的 | 前置條件 (Given) | 觸發動作與輸入參數 (When) | 預期結果、狀態碼與 DB 變更 (Then) | 對應規則編號 (\`BR-xx\` / \`VAL-xx\`) |
+|---|---|---|---|---|---|
+| \`TC-01\` | should_create_order_successfully | Valid customer and cart items | Calling createOrder with items | Order status CREATED | \`BR-01\` |
+| \`TC-02\` | should_fail_when_cart_is_empty | Empty cart | Calling createOrder with empty items | Throws Invalid order | \`VAL-01\` |
+`,
+      "utf8"
+    );
+
+    // 1. Generate Jest test harness
+    const jestRes = runCli(workDir, ["gen-test", "001", "--framework", "jest"]);
+    assert.equal(jestRes.status, 0, `gen-test jest failed: ${jestRes.stderr}`);
+    const harnessDir = path.join(workDir, "project", "001", "harness");
+    const filesAfterJest = fs.readdirSync(harnessDir);
+    assert.ok(filesAfterJest.some((f) => f.endsWith(".test.js")), "jest test file should exist");
+    const jestContent = fs.readFileSync(path.join(harnessDir, filesAfterJest.find((f) => f.endsWith(".test.js"))), "utf8");
+    assert.match(jestContent, /TC-01/);
+    assert.match(jestContent, /should_create_order_successfully/);
+    assert.match(jestContent, /\[GIVEN\]/);
+
+    // 2. Generate JUnit 5 test harness
+    const junitRes = runCli(workDir, ["gen-test", "001", "--framework", "junit"]);
+    assert.equal(junitRes.status, 0, `gen-test junit failed: ${junitRes.stderr}`);
+    const filesAfterJunit = fs.readdirSync(harnessDir);
+    assert.ok(filesAfterJunit.some((f) => f.endsWith("Test.java")), "junit test file should exist");
+    const junitContent = fs.readFileSync(path.join(harnessDir, filesAfterJunit.find((f) => f.endsWith("Test.java"))), "utf8");
+    assert.match(junitContent, /@Test/);
+    assert.match(junitContent, /TC-01/);
+    assert.match(junitContent, /@DisplayName/);
+
+    // 3. Generate PyTest harness
+    const pytestRes = runCli(workDir, ["gen-test", "001", "--framework", "pytest"]);
+    assert.equal(pytestRes.status, 0, `gen-test pytest failed: ${pytestRes.stderr}`);
+    const filesAfterPytest = fs.readdirSync(harnessDir);
+    assert.ok(filesAfterPytest.some((f) => f.startsWith("test_") && f.endsWith(".py")), "pytest file should exist");
+    const pyContent = fs.readFileSync(path.join(harnessDir, filesAfterPytest.find((f) => f.startsWith("test_") && f.endsWith(".py"))), "utf8");
+    assert.match(pyContent, /def test_/);
+    assert.match(pyContent, /TC-01/);
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});

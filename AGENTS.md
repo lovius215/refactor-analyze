@@ -26,6 +26,7 @@
 | `refactor:reanalyze <編號>` | `rar` | `refactor-analyze reanalyze <編號>` | 補充 Backlog 後重新分析 | 讀取 `project/<編號>/backlog.md` 內使用者補充的業務邏輯或欄位定義（以及目標系統最新程式碼、DB 與 Git 分支/Hash），**再分析一次**並同步更新 `project/<編號>/` 內所有文件與執行分析時間日期。 |
 | `refactor:verify [編號]` | `rav` | `refactor-analyze verify [編號]` | 0-Token 驗證來源與版本飄移 | 本機 0-Token 掃描 `project/<編號>/` 內所有 `` `<file>#L<start>-L<end>` `` 引用，核對目標系統實體檔案與行數是否真實存在，並比對目標系統 Git Commit Hash 偵測是否因改版導致行號飄移（Drift Detection）。 |
 | `refactor:commit [編號]` | `rac` | `refactor-analyze commit [編號]` | 確認歸檔與 Git 同步 | 先自動執行 `verify` 驗證來源引用完整性，通過後更新 `project/index.md` 的「複雜度」與「目前的狀態」；同步匯總至 `project/system/domain-flows.md` 與 `project/system/dead-code.md`；自動建立本機 Git commit（排除 `db-connection.md`）；若 Git 有設定 remote 則自動 sync（pull + push），**CLI 遇到 Git 衝突時安全停止不破壞檔案，交由 AI (`rac`) 進行語意合併後再自動 commit 與 sync**。 |
+| `refactor:gen-test <編號>` | `rag` | `refactor-analyze gen-test <編號>` *(或 `harness`)* | 產出重構驗收測試治具 | 依據 `project/<編號>/business-logic.md` 的 Given/When/Then 驗收情境與 `analysis.md` 參數規格，**0-Token 自動產生新系統可執行的 Test Harness 測試代碼骨架**（支援 `--framework junit|jest|pytest`，預設存於 `project/<編號>/harness/`）。 |
 | `refactor:pdf [目標]` | `rap` | `refactor-analyze pdf [目標]` *(或 `md2pdf`)* | Markdown 轉 PDF | 將指定的 `.md` 檔案、編號資料夾（如 `001`）或整個 `project/` 轉換為 `.pdf`（支援 `--merge` 合併單一 PDF 與 `--output` 指定輸出路徑）。 |
 | `refactor:upgrade` | `rau` | `refactor-analyze upgrade` *(或 `update`)* | 更新現有分析項目 | 自動偵測並保留現有項目語言與已分析內容，將 `AGENTS.md`、`skills/`、`rules/` 與缺失模板更新至最新版本。 |
 

@@ -31,6 +31,7 @@ const {
 const { scanDatabase } = require("./lib/db-scanner");
 const { verifySingleItem, verifyCommand } = require("./lib/verifier");
 const { exportMarkdownToPdf } = require("./lib/pdf-exporter");
+const { generateTestHarness } = require("./lib/harness-generator");
 
 const cwd = process.cwd();
 
@@ -65,6 +66,11 @@ function main() {
     case "md2pdf":
     case "export-pdf":
       exportMarkdownToPdf(cwd, args.slice(1));
+      return;
+    case "gen-test":
+    case "harness":
+    case "test-harness":
+      handleGenTest(args.slice(1));
       return;
     case "status":
       showStatus();
@@ -483,6 +489,13 @@ function syncWithRemoteSafely(remote, branch) {
   }
 }
 
+function handleGenTest(args = []) {
+  const rawId = args.find((a) => !a.startsWith("-")) || getOption(args, "--id");
+  const framework = getOption(args, "--framework") || getOption(args, "-f");
+  const output = getOption(args, "--output") || getOption(args, "-o");
+  generateTestHarness(cwd, rawId, framework, output);
+}
+
 function upgradeProject(args = []) {
   const dryRun = args.includes("--dry-run");
   const langConfig = detectProjectLanguage(cwd);
@@ -694,6 +707,7 @@ Usage (CLI Commands):
   refactor-analyze reanalyze <編號> [--target <path>]
   refactor-analyze verify [編號] [--target <path>]
   refactor-analyze commit [編號] [--force]
+  refactor-analyze gen-test <編號> [--framework junit|jest|pytest] [--output <dir>]  (or: harness)
   refactor-analyze pdf [檔案路徑|目錄|編號] [--merge] [--output <file.pdf>]
   refactor-analyze upgrade [--dry-run]   (or: refactor-analyze update)
   refactor-analyze status
@@ -708,6 +722,7 @@ AI Workflow Commands (Gemini / Claude / GPT):
   refactor:reanalyze <編號> (alias: rar) - 根據 backlog.md 補充說明再分析一次並更新文件
   refactor:verify [編號]    (alias: rav) - 0-Token 驗證原始碼檔案/行號引用真實性，並偵測目標系統 Git 版本飄移
   refactor:commit [編號]    (alias: rac) - 驗證通過後更新 index.md 狀態、自動 Git commit 與安全 remote sync
+  refactor:gen-test <編號>  (alias: rag / rah) - 0-Token 產出重構驗收測試治具代碼 (JUnit 5 / Jest / PyTest)
   refactor:pdf [目標]       (alias: rap) - 將指定 .md、編號資料夾或整個 project/ 轉換為 PDF 文件
   refactor:upgrade          (alias: rau) - 更新現有分析項目規則與模板
 `);
