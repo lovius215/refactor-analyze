@@ -37,7 +37,6 @@ refactor-analyze init --full
 - `refactor:reanalyze <編號>` (`rar`) → 經由訪談或文檔調查完成憑證簽核拍板後，**再分析一次**將 `[Human: ...]#BL-xx` 引用同步更新至文件
 - `refactor:verify [編號]` (`rav` / CLI `refactor-analyze verify`) → **0-Token 雙軌來源與版本飄移驗證**：自動核對 `#Lx-Ly` 原始碼行號與 `BL-xx` 業務知識憑證簽核狀態，並偵測目標系統 Git 改版飄移
 - `refactor:commit [編號]` (`rac`) → 通過 `verify` 後更新 `index.md` 狀態、**自動提取全系統通用憑證匯總至 `domain-dictionary.md`**、自動 Git commit 與安全 remote sync（CLI 遇衝突安全停止，由 AI `rac` 進行語意合併）
-- `refactor:gen-test <編號>` (`rag` / CLI `refactor-analyze gen-test`) → **0-Token 測試治具生成**：自動產出 JUnit 5、Jest、PyTest 驗收測試骨架（存於 `harness/`）
 - `refactor:pdf [目標]` (`rap`) → **0-Token 本機轉 PDF**：將單一 `.md`、編號資料夾（如 `001`）或整個 `project/` 轉換為 `.pdf`（CLI: `refactor-analyze pdf` 或 `md2pdf`，支援 `--merge` 與 `--output`）
 - `refactor:upgrade` (`rau`) → 更新現有分析項目的規則與缺失模板（CLI: `refactor-analyze upgrade` 或 `update`）
 
@@ -115,10 +114,9 @@ scripts\uninstall.bat
 | **4. 重新分析單一編號** | `refactor-analyze reanalyze <編號>` | `refactor:reanalyze <編號>` | `rar` | 根據 `backlog.md` 補充內容或程式碼/DB 變更**再分析一次**，更新 `project/<編號>/` 內所有文件與分析時間、Git 版本。 |
 | **5. 0-Token 驗證來源與飄移** | `refactor-analyze verify [編號]` | `refactor:verify [編號]` | `rav` | 本機 0-Token 核對所有 `#Lx-Ly` 原始碼檔案與行號是否真實存在，並比對 Git Commit Hash 偵測目標系統改版飄移。 |
 | **6. 確認提交與遠端同步** | `refactor-analyze commit [編號]` | `refactor:commit [編號]` | `rac` | 通過 `verify` 後更新 `project/index.md` 狀態、自動 commit 到 Git；若有 remote 自動安全 sync（CLI 遇衝突安全停止不破壞檔案，交由 AI `rac` 語意合併）。 |
-| **7. 產出重構測試治具** | `refactor-analyze gen-test <編號> [--framework junit\|jest\|pytest]` *(或 `harness`)* | `refactor:gen-test <編號>` | `rag` | **0-Token 測試治具生成**：依據 `business-logic.md` 的 Given/When/Then 驗收情境與 `analysis.md` 規格，自動產生新系統可執行的 Test Harness 測試代碼（存於 `harness/`）。 |
-| **8. 匯出 PDF 文件** | `refactor-analyze pdf [目標] [--merge] [--output ...]` *(或 `md2pdf`)* | `refactor:pdf [目標]` | `rap` | **0-Token 本機轉換**：將指定的 `.md` 檔案、編號資料夾（如 `001`）或整個 `project/` 轉換為 `.pdf`（支援 `--merge` 合併為單一 PDF）。 |
-| **9. 更新現有分析項目** | `refactor-analyze upgrade [--dry-run]` *(或 `update`)* | `refactor:upgrade` | `rau` | 將現有分析項目的 `AGENTS.md`、`skills/`、`rules/` 與缺失文件模板更新至最新版本（保留既有語言與分析內容）。 |
-| **10. 狀態與健康檢查** | `refactor-analyze status` / `check` / `doctor` | - | - | 查看清單完成進度、檢查必要檔案是否齊全。 |
+| **7. 匯出 PDF 文件** | `refactor-analyze pdf [目標] [--merge] [--output ...]` *(或 `md2pdf`)* | `refactor:pdf [目標]` | `rap` | **0-Token 本機轉換**：將指定的 `.md` 檔案、編號資料夾（如 `001`）或整個 `project/` 轉換為 `.pdf`（支援 `--merge` 合併為單一 PDF）。 |
+| **8. 更新現有分析項目** | `refactor-analyze upgrade [--dry-run]` *(或 `update`)* | `refactor:upgrade` | `rau` | 將現有分析項目的 `AGENTS.md`、`skills/`、`rules/` 與缺失文件模板更新至最新版本（保留既有語言與分析內容）。 |
+| **9. 狀態與健康檢查** | `refactor-analyze status` / `check` / `doctor` | - | - | 查看清單完成進度、檢查必要檔案是否齊全。 |
 
 ---
 
@@ -253,15 +251,7 @@ refactor-analyze commit 001
 - 自動將 `project/index.md` 中 `001` 的狀態更新為 `已完成`（或 `待確認`），並同步更新 `system/dead-code.md`。
 - 自動建立本機 Git commit，若 Git 有設定 remote 則自動執行 sync（pull + push）；**若遇到 Git 衝突，會主動協助解析並合併衝突，處理完成後自動再次 commit 與 sync**！
 
-### 步驟 8：0-Token 產出重構驗收測試治具代碼 (`gen-test` / `rag`)
-```bash
-# 依據業務邏輯與驗收情境自動產生 JUnit 5 測試骨架（亦支援 --framework jest 或 pytest）
-refactor-analyze gen-test 001 --framework junit
-# 或在 AI 對話框輸入：rag 001
-```
-生成的 `project/001/harness/CreateOrderAPITest.java` 內建 `@Test` 測試方法與 `[GIVEN] / [WHEN] / [THEN]` 規格註解，重構團隊與 QA 可直接以此作為 Characterization Test Harness 運行驗收！
-
-### 步驟 9：一鍵匯出專業 PDF 報告 (`pdf` / `rap`)
+### 步驟 8：一鍵匯出專業 PDF 報告 (`pdf` / `rap`)
 ```bash
 # 將編號 001 的 8 份文件合併為單一美觀 PDF 報告
 refactor-analyze pdf 001 --merge
@@ -289,14 +279,14 @@ project/
     domain-flows.md            # 4. 跨編號領域狀態機（State Machine）與核心資料表 CRUD 對照矩陣
     dead-code.md               # 5. 全系統死程式碼總表（列出 Git 分支、Hash、程式檔案名稱、行數、相關代碼）
     code-dictionary.md         # 6. 共用代碼表字典值（scandb 抓取之狀態碼、類型字典對照表）
-    db-schema.md               # 7. 資料庫總覽索引（資料表、View、Stored Procedure、Trigger 列表）
-    db/                        # 8. 各資料表欄位明細與常式原始碼（依 Table 拆檔節省 Token）
+    domain-dictionary.md       # 7. 全域領域業務知識辭典（commit 自動從 backlog 匯總之全系統通用憑證）
+    db-schema.md               # 8. 資料庫總覽索引（資料表、View、Stored Procedure、Trigger 列表）
+    db/                        # 9. 各資料表欄位明細與常式原始碼（依 Table 拆檔節省 Token）
       _routines.md             #    View、Stored Procedure、Function 與 Trigger 之完整 DDL 原始碼
       <table>.md
   shared/                      # 多編號共用邏輯抽離區（避免重複分析燒 Token）
     <shared-module>.md
   001/                         # 第二階段：以「編號」命名的獨立業務邏輯資料夾
-    harness/                   # 0. 重構驗收測試治具（gen-test 產出之 JUnit 5 / Jest / PyTest 程式碼骨架）
     analysis.md                # 1. 分析（執行時間、Git 分支與 Hash、進入點與 I/O Args、涉及檔案、複雜度、重構建議）
     business-logic.md          # 2. 業務邏輯（規則、流程、狀態轉換、計算與驗證邏輯，必附檔案與行號來源）
     ui-behavior.md             # 3. 畫面操作行為與驗證（畫面欄位動態顯隱/唯讀連動、操作事件、元件權限與前後端驗證對照矩陣）

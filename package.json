@@ -26,7 +26,7 @@
     "README*.md"
   ],
   "scripts": {
-    "check": "node --check src/cli.js && node --check src/lib/utils.js && node --check src/lib/db-scanner.js && node --check src/lib/verifier.js && node --check src/lib/pdf-exporter.js && node --check src/lib/harness-generator.js && node --check bin/refactor-analyze.js",
+    "check": "node --check src/cli.js && node --check src/lib/utils.js && node --check src/lib/db-scanner.js && node --check src/lib/verifier.js && node --check src/lib/pdf-exporter.js && node --check bin/refactor-analyze.js",
     "test": "node --test test/cli.test.js"
   },
   "keywords": [

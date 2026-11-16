@@ -68,10 +68,9 @@ All scripts automatically verify that `npm` and `node` are installed before exec
 | **4. Reanalyze by ID** | `refactor-analyze reanalyze <ID>` | `refactor:reanalyze <ID>` | `rar` | Reads signed-off Knowledge Vouchers in `project/<ID>/backlog.md` and latest target Git state to **reanalyze** and update all files with `[Human: ...]#BL-xx` citations. |
 | **5. 0-Token Dual-Track Verify** | `refactor-analyze verify [ID]` | `refactor:verify [ID]` | `rav` | Local 0-Token check verifying both `#Lx-Ly` source line ranges and `BL-xx` Knowledge Voucher sign-offs, plus Git commit drift detection. |
 | **6. Commit & Safe Remote Sync** | `refactor-analyze commit [ID]` | `refactor:commit [ID]` | `rac` | Runs `verify` first, updates `project/index.md` status, **promotes global vouchers to `domain-dictionary.md`**, creates local Git commit, and safely syncs with remote. |
-| **7. Generate Test Harness** | `refactor-analyze gen-test <ID> [--framework junit\|jest\|pytest]` *(or `harness`)* | `refactor:gen-test <ID>` | `rag` | **0-Token Test Harness**: Generates runnable JUnit 5, Jest, or PyTest skeleton code from Given/When/Then acceptance scenarios into `harness/`. |
-| **8. Export Markdown to PDF** | `refactor-analyze pdf [target] [--merge] [--output ...]` *(or `md2pdf`)* | `refactor:pdf [target]` | `rap` | **0-Token Local PDF Export**: Converts a `.md` file, a numbered folder (e.g., `001`), or the entire `project/` into `.pdf` (supports `--merge` into a single PDF). |
-| **9. Upgrade Workspace** | `refactor-analyze upgrade [--dry-run]` *(or `update`)* | `refactor:upgrade` | `rau` | Non-destructively updates `AGENTS.md`, `skills/`, `rules/`, and missing templates in an existing workspace while preserving language settings. |
-| **10. Status & Diagnostics** | `refactor-analyze status` / `check` / `doctor` | - | - | Displays analysis progress and verifies workspace file integrity. |
+| **7. Export Markdown to PDF** | `refactor-analyze pdf [target] [--merge] [--output ...]` *(or `md2pdf`)* | `refactor:pdf [target]` | `rap` | **0-Token Local PDF Export**: Converts a `.md` file, a numbered folder (e.g., `001`), or the entire `project/` into `.pdf` (supports `--merge` into a single PDF). |
+| **8. Upgrade Workspace** | `refactor-analyze upgrade [--dry-run]` *(or `update`)* | `refactor:upgrade` | `rau` | Non-destructively updates `AGENTS.md`, `skills/`, `rules/`, and missing templates in an existing workspace while preserving language settings. |
+| **9. Status & Diagnostics** | `refactor-analyze status` / `check` / `doctor` | - | - | Displays analysis progress and verifies workspace file integrity. |
 
 ---
 

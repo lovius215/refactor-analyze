@@ -66,10 +66,9 @@
 | **4. 번호별 재분석** | `refactor-analyze reanalyze <번호>` | `refactor:reanalyze <번호>` | `rar` | 인터뷰·규격서로 확정 서명된 `backlog.md` 증빙(`[Human: ...]#BL-xx`)과 최신 코드 변경을 반영해 **재분석**하고 모든 문서 갱신. |
 | **5. 0-Token 이중 출처 및 드리프트 검증** | `refactor-analyze verify [번호]` | `refactor:verify [번호]` | `rav` | 로컬 0-Token으로 `#Lx-Ly` 라인 번호와 `BL-xx` 증빙 서명 유효성을 검증하고 대상 시스템의 Git 변경에 따른 라인 이동 감지. |
 | **6. 확정 커밋 및 동기화** | `refactor-analyze commit [번호]` | `refactor:commit [번호]` | `rac` | `verify` 통과 후 `project/index.md` 갱신, **전역 증빙을 `domain-dictionary.md`로 자동 승격**, Git 커밋 및 안전한 원격 sync 실행. |
-| **7. 테스트 하네스 생성** | `refactor-analyze gen-test <번호> [--framework junit\|jest\|pytest]` *(또는 `harness`)* | `refactor:gen-test <번호>` | `rag` | **0-Token 테스트 생성**: Given/When/Then 시나리오를 바탕으로 JUnit 5, Jest, PyTest 테스트 스켈레톤 코드를 `harness/`에 자동 생성. |
-| **8. PDF 내보내기** | `refactor-analyze pdf [대상] [--merge] [--output ...]` *(또는 `md2pdf`)* | `refactor:pdf [대상]` | `rap` | **0-Token 로컬 변환**: 지정한 `.md` 파일, 번호 폴더(예: `001`) 또는 `project/` 전체를 `.pdf`로 변환(`--merge`로 단일 PDF 병합 지원). |
-| **9. 기존 프로젝트 업데이트** | `refactor-analyze upgrade [--dry-run]` *(또는 `update`)* | `refactor:upgrade` | `rau` | 기존 분석 항목의 언어 설정과 분석 내용을 유지한 채 규칙과 누락된 템플릿을 최신 버전으로 업데이트. |
-| **10. 상태 및 점검** | `refactor-analyze status` / `check` / `doctor` | - | - | 진행 상태 확인 및 필수 파일 점검. |
+| **7. PDF 내보내기** | `refactor-analyze pdf [대상] [--merge] [--output ...]` *(또는 `md2pdf`)* | `refactor:pdf [대상]` | `rap` | **0-Token 로컬 변환**: 지정한 `.md` 파일, 번호 폴더(예: `001`) 또는 `project/` 전체를 `.pdf`로 변환(`--merge`로 단일 PDF 병합 지원). |
+| **8. 기존 프로젝트 업데이트** | `refactor-analyze upgrade [--dry-run]` *(또는 `update`)* | `refactor:upgrade` | `rau` | 기존 분석 항목의 언어 설정과 분석 내용을 유지한 채 규칙과 누락된 템플릿을 최신 버전으로 업데이트. |
+| **9. 상태 및 점검** | `refactor-analyze status` / `check` / `doctor` | - | - | 진행 상태 확인 및 필수 파일 점검. |
 
 ---
 

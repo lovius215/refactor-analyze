@@ -58,10 +58,9 @@
 | **4. 重新分析單一編號** | `refactor-analyze reanalyze <編號>` | `refactor:reanalyze <編號>` | `rar` | 根據訪談調查與 `backlog.md` 憑證簽核結果**再分析一次**，將 `[Human: ...]#BL-xx` 引用正式更新至文件。 |
 | **5. 0-Token 雙軌驗證與飄移** | `refactor-analyze verify [編號]` | `refactor:verify [編號]` | `rav` | 本機 0-Token 雙軌核對 `#Lx-Ly` 原始碼檔案與行號及 `BL-xx` 業務憑證有效性，並偵測目標系統 Git 改版飄移。 |
 | **6. 確認提交與遠端同步** | `refactor-analyze commit [編號]` | `refactor:commit [編號]` | `rac` | 通過 `verify` 後更新 `project/index.md` 狀態、**自動提取全系統通用憑證匯總至 `domain-dictionary.md`**、自動 commit 到 Git；若有 remote 自動安全 sync。 |
-| **7. 產出重構測試治具** | `refactor-analyze gen-test <編號> [--framework junit\|jest\|pytest]` *(或 `harness`)* | `refactor:gen-test <編號>` | `rag` | **0-Token 測試治具生成**：依據 `business-logic.md` 的 Given/When/Then 驗收情境與 `analysis.md` 規格，自動產生新系統可執行的 Test Harness 測試代碼（存於 `harness/`）。 |
-| **8. 匯出 PDF 文件** | `refactor-analyze pdf [目標] [--merge] [--output ...]` *(或 `md2pdf`)* | `refactor:pdf [目標]` | `rap` | **0-Token 本機轉換**：將指定的 `.md` 檔案、編號資料夾（如 `001`）或整個 `project/` 轉換為 `.pdf`（支援 `--merge` 合併為單一 PDF）。 |
-| **9. 更新現有分析項目** | `refactor-analyze upgrade [--dry-run]` *(或 `update`)* | `refactor:upgrade` | `rau` | 更新現有分析項目的 `AGENTS.md`、`skills/`、`rules/` 與缺失模板（保留既有語言與分析內容）。 |
-| **10. 檢查與狀態** | `refactor-analyze status` / `check` / `doctor` | - | - | 查看清單進度與檢查必要檔案。 |
+| **7. 匯出 PDF 文件** | `refactor-analyze pdf [目標] [--merge] [--output ...]` *(或 `md2pdf`)* | `refactor:pdf [目標]` | `rap` | **0-Token 本機轉換**：將指定的 `.md` 檔案、編號資料夾（如 `001`）或整個 `project/` 轉換為 `.pdf`（支援 `--merge` 合併為單一 PDF）。 |
+| **8. 更新現有分析項目** | `refactor-analyze upgrade [--dry-run]` *(或 `update`)* | `refactor:upgrade` | `rau` | 更新現有分析項目的 `AGENTS.md`、`skills/`、`rules/` 與缺失模板（保留既有語言與分析內容）。 |
+| **9. 檢查與狀態** | `refactor-analyze status` / `check` / `doctor` | - | - | 查看清單進度與檢查必要檔案。 |
 
 ---
 
@@ -177,15 +176,7 @@ refactor-analyze commit 001
 - 自動將 `project/index.md` 中的 `001` 狀態更新為 `已完成`。
 - 自動建立本機 Git commit；若有設定 remote 則自動安全同步（若遇到衝突會停止並引導 AI 語意合併）。
 
-### Step 7. 0-Token 產出新系統重構驗收測試治具 (`gen-test` / `rag`)
-```bash
-# 依據業務規則驗收情境自動產生可執行的 JUnit 5 測試代碼（亦支援 --framework jest 或 pytest）
-refactor-analyze gen-test 001 --framework junit
-# 或在 AI 對話輸入：rag 001
-```
-生成的 `project/001/harness/CreateOrderAPITest.java` 內建 `@Test` 測試方法與 `[GIVEN] / [WHEN] / [THEN]` 規格註解，重構團隊與 QA 可直接作為 Test Harness 運行驗收！
-
-### Step 8. 一鍵匯出 PDF 報告 (`rap 001`)
+### Step 7. 一鍵匯出 PDF 報告 (`rap 001`)
 ```bash
 # 將編號 001 的 8 份文件合併為單一美觀 PDF，直接交付利害關係人與主管
 refactor-analyze pdf 001 --merge
