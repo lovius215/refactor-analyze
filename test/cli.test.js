@@ -307,3 +307,72 @@ test("4. gen-test generates runnable test harness code for JUnit, Jest, and PyTe
     fs.rmSync(workDir, { recursive: true, force: true });
   }
 });
+
+test("5. voucher verification detects missing/unconfirmed vouchers, passes confirmed vouchers, and promotes global vouchers to domain-dictionary.md on commit", () => {
+  const workDir = makeTempDir("ra-voucher-");
+  try {
+    runCli(workDir, ["init"]);
+    assert.ok(
+      fs.existsSync(path.join(workDir, "project", "system", "domain-dictionary.md")),
+      "domain-dictionary.md should be initialized"
+    );
+
+    runCli(workDir, ["analyze", "001"]);
+    const itemDir = path.join(workDir, "project", "001");
+
+    // Clean templates
+    fs.writeFileSync(path.join(itemDir, "analysis.md"), "# 分析\n- **Git 版本**：`abcdef1`\n- **複雜度等級**：`低`\n- **目前的狀態**：`待分析`\n", "utf8");
+    fs.writeFileSync(path.join(itemDir, "ui-behavior.md"), "# UI 行為\n無畫面操作（純後端 API / 批次作業）\n", "utf8");
+    fs.writeFileSync(path.join(itemDir, "data-flow.md"), "# 資料流\n無資料流\n", "utf8");
+    fs.writeFileSync(path.join(itemDir, "sql.md"), "# SQL\n無 SQL 操作\n", "utf8");
+    fs.writeFileSync(path.join(itemDir, "dependencies.md"), "# 依賴\n無特殊外部依賴\n", "utf8");
+    fs.writeFileSync(path.join(itemDir, "dead-code.md"), "# 死程式碼\n無死程式碼\n", "utf8");
+
+    // 1. Business logic cites BL-01, but backlog has BL-01 as 待確認
+    fs.writeFileSync(
+      path.join(itemDir, "business-logic.md"),
+      "# 業務邏輯\n- 訂單超時取消規則：`[Human: 訪談維運主管]#BL-01` 當超過 30 分鐘未付款時自動標記為取消。\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(itemDir, "backlog.md"),
+      `# Backlog
+| 憑證編號 | 類型 | 程式/資料庫位置 | 疑問與待釐清事項 | 調查結果與拍板決策 | 來源類型 | 佐證依據/訪談記錄 | 拍板人 | 適用範圍 | 狀態 |
+|---|---|---|---|---|---|---|---|---|---|
+| \`BL-01\` | 狀態碼/魔術數字 | ORDERS.STS_CD | STS_CD = '9' 含義為何 | 待確認 | Human/Interview | 會議訪談 | - | 全系統通用 | 待確認 |
+`,
+      "utf8"
+    );
+
+    const verifyFail = runCli(workDir, ["verify", "001"]);
+    assert.notEqual(verifyFail.status, 0, "verify should fail on unconfirmed voucher");
+    assert.match(verifyFail.stdout, /尚未釐清的 Backlog 業務憑證/);
+
+    // 2. Resolve voucher with signoff, conclusion, and mark as 已釐清
+    fs.writeFileSync(
+      path.join(itemDir, "backlog.md"),
+      `# Backlog
+| 憑證編號 | 類型 | 程式/資料庫位置 | 疑問與待釐清事項 | 調查結果與拍板決策 | 來源類型 | 佐證依據/訪談記錄 | 拍板人 | 適用範圍 | 狀態 |
+|---|---|---|---|---|---|---|---|---|---|
+| \`BL-01\` | 狀態碼/魔術數字 | ORDERS.STS_CD | STS_CD = '9' 含義為何 | 經確認代表系統逾時自動取消 | Human/Interview | 2026-03-31 運營產銷週會記錄 | 王小明 (PM) | 全系統通用 | 已釐清 |
+`,
+      "utf8"
+    );
+
+    const verifyPass = runCli(workDir, ["verify", "001"]);
+    assert.equal(verifyPass.status, 0, `verify should pass on confirmed voucher: ${verifyPass.stdout}`);
+    assert.match(verifyPass.stdout, /1 處業務憑證/);
+
+    // 3. Commit item 001 -> should auto-promote BL-01 to project/system/domain-dictionary.md
+    const commitRes = runCli(workDir, ["commit", "001"]);
+    assert.equal(commitRes.status, 0, `commit should succeed: ${commitRes.stderr}`);
+
+    const dictContent = fs.readFileSync(path.join(workDir, "project", "system", "domain-dictionary.md"), "utf8");
+    assert.match(dictContent, /BL-01/);
+    assert.match(dictContent, /經確認代表系統逾時自動取消/);
+    assert.match(dictContent, /王小明 \(PM\)/);
+    assert.match(dictContent, /`001`/);
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});

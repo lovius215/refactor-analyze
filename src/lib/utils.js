@@ -590,6 +590,99 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
       }
     }
   }
+
+  // 3. Parse backlog.md for resolved global vouchers and promote to domain-dictionary.md
+  aggregateDomainDictionary(cwd, itemId);
+}
+
+function aggregateDomainDictionary(cwd, itemId) {
+  const normId = normalizeItemId(itemId);
+  const itemDir = path.join(cwd, "project", normId);
+  const backlogPath = path.join(itemDir, "backlog.md");
+  const dictPath = path.join(cwd, "project", "system", "domain-dictionary.md");
+
+  if (!fs.existsSync(backlogPath) || !fs.existsSync(dictPath)) return;
+
+  const content = fs.readFileSync(backlogPath, "utf8");
+  const lines = content.split("\n");
+  const vouchersToPromote = [];
+
+  for (const line of lines) {
+    if (!line.startsWith("|") || line.includes("憑證編號") || line.includes("---")) continue;
+    const parts = line
+      .split("|")
+      .map((p) => p.trim())
+      .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+    if (parts.length < 10) continue;
+    const id = parts[0].replace(/`/g, "").trim();
+    if (!id || id.includes("待分析") || id.includes("{{")) continue;
+    const type = parts[1].replace(/`/g, "").trim();
+    const location = parts[2].replace(/`/g, "").trim();
+    const question = parts[3].replace(/`/g, "").trim();
+    const conclusion = parts[4].replace(/`/g, "").trim();
+    const sourceType = parts[5].replace(/`/g, "").trim();
+    const evidence = parts[6].replace(/`/g, "").trim();
+    const signoff = parts[7].replace(/`/g, "").trim();
+    const scope = parts[8].replace(/`/g, "").trim();
+    const status = parts[9].replace(/`/g, "").trim();
+
+    if (
+      status.includes("已釐清") &&
+      (scope.includes("全系統通用") || scope.includes("全域") || scope.toLowerCase().includes("global"))
+    ) {
+      vouchersToPromote.push({
+        id,
+        type,
+        location,
+        question,
+        conclusion,
+        sourceType,
+        evidence,
+        signoff,
+        scope,
+        status
+      });
+    }
+  }
+
+  if (vouchersToPromote.length === 0) return;
+
+  let dictContent = fs.readFileSync(dictPath, "utf8");
+
+  function insertRowToSection(secTitle, rowStr) {
+    const secIdx = dictContent.indexOf(secTitle);
+    if (secIdx === -1) return;
+    const tableHeaderStr = "|---|---|---|---|---|---|";
+    const sepIdx = dictContent.indexOf(tableHeaderStr, secIdx);
+    if (sepIdx === -1) return;
+
+    const afterSep = sepIdx + tableHeaderStr.length;
+    const placeholderStr = "| *(待由各編號 commit 自動匯總)* | - | - | - | - | - |\n";
+    if (dictContent.includes(placeholderStr)) {
+      dictContent = dictContent.replace(placeholderStr, "");
+    }
+    dictContent = dictContent.slice(0, afterSep) + "\n" + rowStr + dictContent.slice(afterSep);
+  }
+
+  for (const v of vouchersToPromote) {
+    const voucherTag = `\`${v.id}\``;
+    if (dictContent.includes(voucherTag) && dictContent.includes(`\`${normId}\``)) {
+      continue;
+    }
+
+    const isRule = v.type.includes("規則") || v.type.includes("公式") || v.type.includes("流程");
+    if (isRule) {
+      const label = v.question || v.location || v.type;
+      const row = `| \`${label}\` (${voucherTag}) | ${v.conclusion} | ${v.sourceType || "官方規範"} | ${v.evidence || "-"} | ${v.signoff || "-"} | \`${normId}\` |`;
+      insertRowToSection("## 2. 跨模組通用商業計算公式與規則", row);
+    } else {
+      const label = v.location || v.question || v.type;
+      const row = `| \`${label}\` (${voucherTag}) | ${v.conclusion} | ${v.sourceType || "人工調查"} | ${v.evidence || "-"} | ${v.signoff || "-"} | \`${normId}\` |`;
+      insertRowToSection("## 1. 全域業務狀態碼與縮寫欄位辭典", row);
+    }
+  }
+
+  fs.writeFileSync(dictPath, dictContent, "utf8");
 }
 
 module.exports = {
@@ -607,6 +700,7 @@ module.exports = {
   parseIndexItems,
   updateIndexRowStatus,
   aggregateDomainFlowsAndDeadCode,
+  aggregateDomainDictionary,
   detectProjectLanguage,
   getDefaultRemote,
   getCurrentBranch,

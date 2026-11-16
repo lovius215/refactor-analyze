@@ -15,25 +15,42 @@
 
 ---
 
-## 2. Backlog 自動產出與 `reanalyze` 閉環（`project/<編號>/backlog.md`）
+## 2. 業務知識憑證（Knowledge Voucher）、Backlog 與全域辭典閉環
 
-1. **自動產出**：執行 `analyze <編號>` 時，必須自動建立並填入 `project/<編號>/backlog.md`，將所有：
+### 2.1 業務知識憑證（Knowledge Voucher）記錄規範（`project/<編號>/backlog.md`）
+
+1. **結構化憑證立案**：執行 `analyze <編號>` 時，凡遇下列情境，一律嚴禁憑空猜測，必須於 `project/<編號>/backlog.md` 建立結構化業務知識憑證：
    - 語意不明或缺乏註解的業務邏輯與條件分支
-   - 資料庫與程式碼中無註解說明的欄位定義或狀態碼（Magic Numbers）
+   - 資料庫與程式碼中無註解說明的縮寫欄位定義或狀態碼（Magic Numbers）
    - 缺少原始碼的外部系統介面或 DB Stored Procedure
-   逐一編號列管，狀態標為 `待確認`。
-2. **補充與重新分析（`reanalyze <編號>` / `rar <編號>`）**：
-   - 當使用者在 `backlog.md` 填入確認後的定義或說明並執行 `reanalyze <編號>` 時，AI 必須讀取補充內容與目標系統最新程式碼/Git 狀態，**再分析一次**，將已確認的定義正式寫入 `business-logic.md`、`data-flow.md`、`sql.md`、`analysis.md` 中，並將該筆 Backlog 狀態更新為 `已釐清`。
+2. **憑證欄位標準**：
+   - `憑證編號`：`BL-01`, `BL-02`...
+   - `類型`：`業務名詞/欄位`、`商業規則/流程`、`狀態碼/魔術數字`、`計算公式` 等
+   - `程式/資料庫位置`：原始碼檔案或資料表欄位
+   - `疑問與待釐清事項`：具體問題
+   - `調查結果與拍板決策`：調查結果（待人工或官方規格確認）
+   - `來源類型`：`Human/Interview`（訪談/會議）、`Official-Doc`（官方規範）、`Production-DB`（實測資料）、`Business-Decision`（業務拍板）
+   - `佐證依據/訪談記錄`：會議記錄、簽呈、文件章節或 SQL 查證指令
+   - `拍板人`：姓名或職稱（如 `王小明 (PM)`）
+   - `適用範圍`：`全系統通用` 或 `單一編號: <編號>`
+   - `狀態`：`待確認` 或 `已釐清`
+3. **雙軌引用規範（Dual-Track Citation）**：
+   - 程式碼依據：使用 `` `path/File.java#L10-L25` ``
+   - 人為調查/規格書依據：必須使用憑證引用格式，如 `` `[Human: 訪談維運主管]#BL-01` `` 或 `` `[Doc: 2025會員手冊第4條]#BL-02` ``。
+   - `refactor-analyze verify` 將嚴格核對該憑證是否在 `backlog.md` 中立案、狀態是否為 `已釐清`，且具備簽核拍板人與結論。
+4. **補充與重新分析（`reanalyze <編號>` / `rar <編號>`）**：
+   - 當使用者在 `backlog.md` 填入確認後的定義與拍板人並執行 `reanalyze <編號>` 時，AI 必須讀取補充內容，將已確認的業務邏輯正式寫入 `business-logic.md`、`data-flow.md` 等文件，並將狀態標為 `已釐清`。
 
 ---
 
-## 3. `commit` 確認歸檔、自動 Git Commit、Remote Sync 與衝突處理規範
+## 3. `commit` 確認歸檔、全域辭典匯總、Git Sync 與衝突處理規範
 
 當使用者執行 `refactor-analyze commit [編號]`（或 AI 指令 `refactor:commit [編號]` / `rac [編號]`）時，必須依序完成以下動作：
 
 1. **確認並更新 `project/index.md` 狀態**：
    - 檢查該編號的分析文件與 `backlog.md`，將 `project/index.md` 對應編號的「複雜度」與「目前的狀態」（如 `已完成` 或 `待確認`）更新為最新確認結果。
    - 同步更新 `project/system/domain-flows.md`（跨編號領域狀態機與資料表 CRUD 矩陣）與 `project/system/dead-code.md`（全域死程式碼總表）。
+   - **自動匯總全域辭典**：自動掃描 `backlog.md`，將標記為 `已釐清` 且範圍為 `全系統通用` 之業務憑證自動收錄至 `project/system/domain-dictionary.md`，供後續所有編號直接繼承，嚴禁重複提問！
 2. **自動建立本機 Git Commit**：
    - 確認 `project/system/db-connection.md` 已被 `.gitignore` 忽略且未進入 staged 區。
    - 將變更加入暫存區並建立本機 commit（例如：`docs(001): 完成編號 001 業務邏輯重構分析歸檔`）。

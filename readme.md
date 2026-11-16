@@ -31,12 +31,13 @@ refactor-analyze init --full
 ```
 
 **🤖 Core AI & CLI Workflow (Gemini / Claude / GPT / Cursor / Antigravity):**
-- `refactor:init [路徑]` (`rai`) → 鎖定語言、詢問目標系統路徑與是否向 Git remote 對齊，產出**系統大概**（`project/system/`）與**分類編號清單**（`project/index.md`）
+- `refactor:init [路徑]` (`rai`) → 鎖定語言、詢問目標系統路徑與是否向 Git remote 對齊，產出**系統大概**（`project/system/`）、**全域領域業務知識辭典（`project/system/domain-dictionary.md`）**與**分類編號清單**（`project/index.md`）
 - `refactor:scandb` (`ras` / CLI `refactor-analyze scandb`) → 依據 `db-connection.md`（支援 SQLite、MySQL/MariaDB、PostgreSQL、SQL Server `sqlcmd`、Oracle `sqlplus` 與 SSH 跳板機，**帳密不進 AI 對話框**）以**強制唯讀 Session** 抓取所有 Table、欄位、PK/FK、Index、註解、View、SP 與 Trigger
-- `refactor:analyze <編號>` (`raa`) → 新建以**編號**命名的資料夾（`project/001/`），產出分析、業務邏輯、**畫面操作行為與驗證（`ui-behavior.md`）**、資料流、SQL、依賴關係、死程式碼，並**自動產出 `backlog.md`**
-- `refactor:reanalyze <編號>` (`rar`) → 在 `backlog.md` 補充未知欄位或業務邏輯後，**再分析一次**並同步更新文件
-- `refactor:verify [編號]` (`rav` / CLI `refactor-analyze verify`) → **0-Token 防幻覺與版本飄移驗證**：自動核對 `#Lx-Ly` 原始碼檔案與行號是否真實存在，並比對 Git Commit Hash 偵測目標系統是否已改版導致行號偏移
-- `refactor:commit [編號]` (`rac`) → 通過 `verify` 後更新 `project/index.md` 狀態、自動 Git commit、若有 remote 自動安全 sync（**CLI 遇衝突時安全停止不破壞檔案，交由 AI `rac` 進行語意合併**）
+- `refactor:analyze <編號>` (`raa`) → 優先繼承 `domain-dictionary.md` 全域定義，新建以**編號**命名的資料夾（`project/001/`），產出分析、業務邏輯、**畫面操作行為與驗證（`ui-behavior.md`）**、資料流、SQL、依賴關係、死程式碼，並**自動建立結構化業務知識憑證庫（`backlog.md`）**
+- `refactor:reanalyze <編號>` (`rar`) → 經由訪談或文檔調查完成憑證簽核拍板後，**再分析一次**將 `[Human: ...]#BL-xx` 引用同步更新至文件
+- `refactor:verify [編號]` (`rav` / CLI `refactor-analyze verify`) → **0-Token 雙軌來源與版本飄移驗證**：自動核對 `#Lx-Ly` 原始碼行號與 `BL-xx` 業務知識憑證簽核狀態，並偵測目標系統 Git 改版飄移
+- `refactor:commit [編號]` (`rac`) → 通過 `verify` 後更新 `index.md` 狀態、**自動提取全系統通用憑證匯總至 `domain-dictionary.md`**、自動 Git commit 與安全 remote sync（CLI 遇衝突安全停止，由 AI `rac` 進行語意合併）
+- `refactor:gen-test <編號>` (`rag` / CLI `refactor-analyze gen-test`) → **0-Token 測試治具生成**：自動產出 JUnit 5、Jest、PyTest 驗收測試骨架（存於 `harness/`）
 - `refactor:pdf [目標]` (`rap`) → **0-Token 本機轉 PDF**：將單一 `.md`、編號資料夾（如 `001`）或整個 `project/` 轉換為 `.pdf`（CLI: `refactor-analyze pdf` 或 `md2pdf`，支援 `--merge` 與 `--output`）
 - `refactor:upgrade` (`rau`) → 更新現有分析項目的規則與缺失模板（CLI: `refactor-analyze upgrade` 或 `update`）
 

@@ -9,6 +9,7 @@ const {
 } = require("./utils");
 
 const CITATION_REGEX = /`([^`\n]+?\.[a-zA-Z0-9]{1,10})#L(\d+)(?:-(?:L)?(\d+))?`/g;
+const VOUCHER_REGEX = /`\[(Human|Doc|DB|Decision)[^`\]\n]*\]#(BL-\d+)`/g;
 const DB_REF_REGEX = /(?:project\/system\/)?db\/([a-zA-Z0-9_.-]+\.md)/g;
 
 function extractCitationsFromText(text, docName) {
@@ -42,6 +43,59 @@ function extractCitationsFromText(text, docName) {
     });
   }
   return citations;
+}
+
+function extractVouchersFromText(text, docName) {
+  const vouchers = [];
+  const nonBlockquoteText = text
+    .split("\n")
+    .filter((line) => !line.trim().startsWith(">"))
+    .join("\n");
+  let match;
+  VOUCHER_REGEX.lastIndex = 0;
+  while ((match = VOUCHER_REGEX.exec(nonBlockquoteText)) !== null) {
+    vouchers.push({
+      docName,
+      raw: match[0],
+      sourceType: match[1],
+      voucherId: match[2]
+    });
+  }
+  return vouchers;
+}
+
+function parseBacklogVouchers(backlogContent) {
+  const vouchers = new Map();
+  const lines = (backlogContent || "").split("\n");
+  for (const line of lines) {
+    if (
+      !line.startsWith("|") ||
+      line.includes("憑證編號") ||
+      line.includes("憑證 ID") ||
+      line.includes("---")
+    ) {
+      continue;
+    }
+    const parts = line
+      .split("|")
+      .map((p) => p.trim())
+      .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+    if (parts.length >= 6) {
+      const id = parts[0].replace(/`/g, "").trim();
+      if (!id || id.includes("待分析") || id.includes("{{")) continue;
+      // Typical columns: ID | Type | Location | Question | Conclusion | SourceType | Evidence | Signoff | Scope | Status
+      const status = parts[parts.length - 1].replace(/`/g, "").trim();
+      const signoff = parts.length >= 8 ? parts[parts.length - 3].replace(/`/g, "").trim() : "";
+      const conclusion = parts.length >= 5 ? parts[4].replace(/`/g, "").trim() : "";
+      vouchers.set(id, {
+        id,
+        status,
+        signoff,
+        conclusion
+      });
+    }
+  }
+  return vouchers;
 }
 
 function getFileLineCount(targetDir, relFilePath, recordedCommitHash) {
@@ -97,6 +151,7 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
   const errors = [];
   const warnings = [];
   const allCitations = [];
+  const allVouchers = [];
   const dbRefs = new Set();
 
   let recordedCommitHash = null;
@@ -110,6 +165,12 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
       recordedCommitHash = commitMatch[1].trim();
     }
   }
+
+  // Parse backlog.md vouchers if present
+  const backlogPath = path.join(itemDir, "backlog.md");
+  const knownVouchers = fs.existsSync(backlogPath)
+    ? parseBacklogVouchers(fs.readFileSync(backlogPath, "utf8"))
+    : new Map();
 
   for (const docName of coreDocs) {
     const docPath = path.join(itemDir, docName);
@@ -126,9 +187,12 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
     const docCitations = extractCitationsFromText(content, docName);
     allCitations.push(...docCitations);
 
-    if (docName === "business-logic.md" && docCitations.length === 0) {
+    const docVouchers = extractVouchersFromText(content, docName);
+    allVouchers.push(...docVouchers);
+
+    if (docName === "business-logic.md" && (docCitations.length + docVouchers.length) === 0) {
       errors.push(
-        `[business-logic.md] 未偵測到任何原始碼檔案與行號引用（格式如 \`src/Foo.java#L10-L25\`），違反禁止 AI 幻想鐵律`
+        `[business-logic.md] 未偵測到任何原始碼檔案與行號引用（格式如 \`src/Foo.java#L10-L25\`）或已釐清之業務憑證引用（格式如 \`[Human: ...]#BL-01\`），違反禁止 AI 幻想鐵律`
       );
     }
 
@@ -139,6 +203,24 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
       if (!refFile.includes("<table>")) {
         dbRefs.add(refFile);
       }
+    }
+  }
+
+  // Verify business knowledge vouchers against backlog.md
+  for (const v of allVouchers) {
+    const bv = knownVouchers.get(v.voucherId);
+    if (!bv) {
+      errors.push(
+        `[${v.docName}] 引用了不存在的 Backlog 業務憑證 ${v.raw}（未在 backlog.md 中定義）`
+      );
+    } else if (!bv.status.includes("已釐清")) {
+      errors.push(
+        `[${v.docName}] 引用了尚未釐清的 Backlog 業務憑證 ${v.raw}（狀態為：${bv.status || "待確認"}，尚未由人工拍板確認）`
+      );
+    } else if (!bv.signoff || !bv.conclusion) {
+      errors.push(
+        `[${v.docName}] 引用之 Backlog 業務憑證 ${v.raw} 缺乏拍板人或決策結論，無法作為有效來源依據`
+      );
     }
   }
 
@@ -227,7 +309,8 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
     errors,
     warnings,
     driftedFiles,
-    citationCount: allCitations.length
+    citationCount: allCitations.length,
+    voucherCount: allVouchers.length
   };
 }
 
@@ -264,7 +347,8 @@ function verifyCommand(cwd, args = []) {
   for (const id of itemIds) {
     const res = verifySingleItem(cwd, id, targetOverride);
     if (res.valid) {
-      console.log(`PASS [${id}] 驗證通過（共核對 ${res.citationCount} 處原始碼行號引用）`);
+      const extraNote = res.voucherCount > 0 ? `、${res.voucherCount} 處業務憑證` : "";
+      console.log(`PASS [${id}] 驗證通過（共核對 ${res.citationCount} 處原始碼行號引用${extraNote}）`);
     } else {
       hasError = true;
       console.log(`FAIL [${id}] 發現 ${res.errors.length} 項來源引用或完整性問題：`);
@@ -285,5 +369,7 @@ function verifyCommand(cwd, args = []) {
 module.exports = {
   verifySingleItem,
   verifyCommand,
-  extractCitationsFromText
+  extractCitationsFromText,
+  extractVouchersFromText,
+  parseBacklogVouchers
 };

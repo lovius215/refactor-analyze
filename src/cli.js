@@ -182,6 +182,12 @@ function initProject(args = []) {
     ),
     ensureFileFromTemplate(
       cwd,
+      path.join("project", "system", "domain-dictionary.md"),
+      path.join("project", "system", "domain-dictionary.md"),
+      replacements
+    ),
+    ensureFileFromTemplate(
+      cwd,
       path.join("project", "system", "db-schema.md"),
       path.join("project", "system", "db-schema.md"),
       replacements
