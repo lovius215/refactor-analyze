@@ -12,35 +12,53 @@ function parseDbConnectionConfig(cwd) {
   }
 
   const content = fs.readFileSync(configPath, "utf8");
-  const extract = (labelRegex) => {
-    const m = content.match(labelRegex);
-    return m ? m[1].trim() : "";
+  const extract = (labelPattern) => {
+    // 1. Prefer backtick-wrapped value: - **Label**：`value`
+    const backtickRe = new RegExp(`${labelPattern}[^\\n\`]*\`([^\`]*)\``, "i");
+    const bm = content.match(backtickRe);
+    if (bm) return bm[1].trim();
+    // 2. Fallback to unquoted value after colon: - **Label**：value
+    const plainRe = new RegExp(`(?:^|\\n)\\s*-\\s*\\*\\*[^\\n]*${labelPattern}[^\\n]*?\\*\\*\\s*[：:]\\s*([^\\n]+)`, "i");
+    const pm = content.match(plainRe);
+    if (pm) {
+      const cleaned = pm[1].replace(/<!--[\s\S]*?-->/g, "").trim();
+      if (!cleaned.startsWith("*(") && !cleaned.startsWith("(")) {
+        return cleaned;
+      }
+    }
+    return "";
   };
+
+  const rawHostKeyPolicy = extract("(?:StrictHostKeyChecking|主機金鑰檢查|主机密钥检查)").toLowerCase();
+  const sshStrictHostKeyChecking = ["yes", "accept-new", "no"].includes(rawHostKeyPolicy)
+    ? rawHostKeyPolicy
+    : "yes";
 
   return {
     enabled:
-      extract(/(?:啟用資料庫掃描|启用数据库扫描|Enabled|DB スキャン有効化|DB 스캔 활성화)[^`]*`([^`]*)`/i).toLowerCase() ===
+      extract("(?:啟用資料庫掃描|启用数据库扫描|Enabled|DB スキャン有効化|DB 스캔 활성화)").toLowerCase() ===
       "true",
-    product: extract(/(?:資料庫產品|数据库产品|Database Product|DB 製品|DB 제품)[^`]*`([^`]*)`/i).toLowerCase(),
-    host: extract(/(?:連線主機或檔案路徑|连接主机或文件路径|Host \/ Path|ホスト\/パス|호스트\/경로)[^`]*`([^`]*)`/i),
-    port: extract(/(?:^|\n)-\s*\*\*(?:連接埠|端口|Port|ポート|포트)(?:\s*\(Port\))?\*\*[：:]\s*`([^`]*)`/i),
-    database: extract(/(?:資料庫名稱|数据库名称|Database \/ Schema|データベース\/スキーマ|데이터베이스\/스키마)[^`]*`([^`]*)`/i),
-    username: extract(/(?:^|\n)-\s*\*\*(?:帳號|账号|Username|ユーザー名|계정)(?:\s*\(Username\))?\*\*[：:]\s*`([^`]*)`/i),
-    password: extract(/(?:^|\n)-\s*\*\*(?:密碼|密码|Password|パスワード|비밀번호)(?:\s*\(Password\))?\*\*[：:]\s*`([^`]*)`/i),
-    codeTables: extract(/(?:共用代碼表清單|共用代码表清单|Code Tables|コードテーブル|코드 테이블)[^`]*`([^`]*)`/i)
+    product: extract("(?:資料庫產品|数据库产品|Database Product|DB 製品|DB 제품)").toLowerCase(),
+    host: extract("(?:連線主機或檔案路徑|连接主机或文件路径|Host \\/ Path|ホスト\\/パス|호스트\\/경로)"),
+    port: extract("(?:連接埠|端口|Port|ポート|포트)(?:\\s*\\(Port\\))?"),
+    database: extract("(?:資料庫名稱|数据库名称|Database \\/ Schema|データベース\\/スキーマ|데이터베이스\\/스키마)"),
+    username: extract("(?:帳號|账号|Username|ユーザー名|계정)(?:\\s*\\(Username\\))?"),
+    password: extract("(?:密碼|密码|Password|パスワード|비밀번호)(?:\\s*\\(Password\\))?"),
+    codeTables: extract("(?:共用代碼表清單|共用代码表清单|Code Tables|コードテーブル|코드 테이블)")
       .split(",")
       .map((s) => s.trim())
       .filter((s) => /^[a-zA-Z0-9_.]+$/.test(s)),
     sshEnabled:
-      extract(/(?:啟用跳板機|启用跳板机|SSH Enabled|SSH 踏み台有効化|SSH 점프 호스트 활성화)[^`]*`([^`]*)`/i).toLowerCase() ===
+      extract("(?:啟用跳板機|启用跳板机|SSH Enabled|SSH 踏み台有効化|SSH 점프 호스트 활성화)").toLowerCase() ===
       "true",
-    sshHost: extract(/(?:跳板機主機|跳板机主机|SSH Host|SSH ホスト|SSH 호스트)[^`]*`([^`]*)`/i),
-    sshPort: extract(/(?:跳板機連接埠|跳板机端口|SSH Port|SSH ポート|SSH 포트)[^`]*`([^`]*)`/i) || "22",
-    sshUser: extract(/(?:跳板機帳號|跳板机账号|SSH Username|SSH ユーザー名|SSH 계정)[^`]*`([^`]*)`/i),
-    sshPassword: extract(/(?:跳板機密碼|跳板机密码|SSH Password|SSH パスワード|SSH 비밀번호)[^`]*`([^`]*)`/i),
-    sshKeyPath: extract(/(?:跳板機私鑰路徑|跳板机私钥路径|SSH Private Key Path|SSH 秘密鍵パス|SSH 개인키 경로)[^`]*`([^`]*)`/i),
+    sshHost: extract("(?:跳板機主機|跳板机主机|SSH Host|SSH ホスト|SSH 호스트)"),
+    sshPort: extract("(?:跳板機連接埠|跳板机端口|SSH Port|SSH ポート|SSH 포트)") || "22",
+    sshUser: extract("(?:跳板機帳號|跳板机账号|SSH Username|SSH ユーザー名|SSH 계정)"),
+    sshPassword: extract("(?:跳板機密碼|跳板机密码|SSH Password|SSH パスワード|SSH 비밀번호)"),
+    sshKeyPath: extract("(?:跳板機私鑰路徑|跳板机私钥路径|SSH Private Key Path|SSH 秘密鍵パス|SSH 개인키 경로)"),
+    sshStrictHostKeyChecking,
     localTunnelPort:
-      extract(/(?:本地轉發連接埠|本地转发端口|Local Tunnel Port|ローカル転送ポート|로컬 터널 포트)[^`]*`([^`]*)`/i) || "13306"
+      extract("(?:本地轉發連接埠|本地转发端口|Local Tunnel Port|ローカル転送ポート|로컬 터널 포트)") || "13306"
   };
 }
 
@@ -59,6 +77,27 @@ function scanDatabase(cwd) {
     console.log("提示: project/system/db-connection.md 中的「啟用資料庫掃描 (Enabled)」目前為 false。");
     console.log(
       "請先在 project/system/db-connection.md 填寫唯讀資料庫帳號、路徑與密碼（與選填跳板機設定），並將 Enabled 改為 true 後再執行 scandb。"
+    );
+    return;
+  }
+
+  if (!cfg.product) {
+    fail(
+      "設定檔解析失敗：找不到有效的「資料庫產品 (Database Product)」。請確認 project/system/db-connection.md 格式為：- **資料庫產品 (Database Product)**：`mysql`（支援 sqlite / mysql / mariadb / postgres / sqlserver / oracle）。"
+    );
+    return;
+  }
+
+  if (!cfg.host) {
+    fail(
+      "設定檔解析失敗：找不到有效的「連線主機或檔案路徑 (Host / Path)」。請確認 project/system/db-connection.md 格式為：- **連線主機或檔案路徑 (Host / Path)**：`127.0.0.1`（SQLite 請填檔案路徑）。"
+    );
+    return;
+  }
+
+  if (cfg.sshEnabled && (!cfg.sshHost || !cfg.sshUser)) {
+    fail(
+      "SSH 跳板機設定不完整：已啟用跳板機 (SSH Enabled = true)，但缺少「跳板機主機 (SSH Host)」或「跳板機帳號 (SSH Username)」。請確認格式是否包含反引號 `...`。"
     );
     return;
   }
@@ -83,7 +122,7 @@ function scanDatabase(cwd) {
       "-p",
       String(cfg.sshPort),
       "-o",
-      "StrictHostKeyChecking=accept-new",
+      `StrictHostKeyChecking=${cfg.sshStrictHostKeyChecking}`,
       "-o",
       "ExitOnForwardFailure=yes",
       "-o",
@@ -123,7 +162,13 @@ function scanDatabase(cwd) {
       connectPort = cfg.localTunnelPort;
       console.log(`[SSH 跳板機] 通道建立成功，將透過 ${connectHost}:${connectPort} 唯讀連線至資料庫。`);
     } else {
-      console.warn(`[SSH 跳板機警告] 無法建立背景 SSH 通道: ${(sshRes.stderr || "").trim()}`);
+      const errText = (sshRes.stderr || "").trim();
+      console.warn(`[SSH 跳板機警告] 無法建立背景 SSH 通道: ${errText}`);
+      if (errText.includes("Host key verification failed")) {
+        console.warn(
+          `[SSH 主機金鑰提示] 跳板機指紋尚未加入 ~/.ssh/known_hosts。請先執行: ssh-keyscan -p ${cfg.sshPort} -H ${cfg.sshHost} >> ~/.ssh/known_hosts`
+        );
+      }
       controlSocketPath = null;
       fail("SSH 跳板機連線失敗，已中止資料庫掃描（為保護資安，請勿將密碼貼入 AI 對話框）。");
       return;
@@ -1081,6 +1126,7 @@ ${tablesContent}
 
 module.exports = {
   parseDbConnectionConfig,
+  escapeSqlLiteral,
   scanDatabase,
   runReadOnlySchemaScan,
   writeTableMarkdown,
