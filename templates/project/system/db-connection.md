@@ -14,7 +14,8 @@
 - **連接埠 (Port)**: `3306`
 - **資料庫名稱 / Schema (Database / Schema)**: `your_database_name`
 - **帳號 (Username)**: `your_username`
-- **密碼 (Password)**: `your_password`
+- **密碼 (Password)**: `env:DB_PASSWORD`
+  *(強烈建議使用 `env:環境變數名` 或 `${環境變數名}` 以避免明文落盤，亦支援直接填寫密碼或透過環境變數 `RA_DB_PASSWORD` 傳入)*
 - **共用代碼表清單 (Code Tables)**: ``
   *(選填，多個代碼表以逗號分隔，如 `SYS_CODE,SYS_PARAM`；`scandb` 將以唯讀方式匯出前 1,000 筆字典值至 `project/system/code-dictionary.md`，協助 AI 自動解析狀態碼與下拉選單)*
 

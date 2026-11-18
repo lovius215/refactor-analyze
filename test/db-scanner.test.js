@@ -27,8 +27,12 @@ function writeExecutable(dir, name, jsBody) {
   return filePath;
 }
 
-test("db-scanner: parseDbConnectionConfig parses backticks, unquoted fallback, and StrictHostKeyChecking", () => {
+test("db-scanner: parseDbConnectionConfig parses backticks, unquoted fallback, env: secret refs, and StrictHostKeyChecking", () => {
   const workDir = makeTempDir("ra-dbcfg-");
+  const prevDbPass = process.env.TEST_RA_DB_PW;
+  const prevSshPass = process.env.TEST_RA_SSH_PW;
+  process.env.TEST_RA_DB_PW = "resolved_db_secret";
+  process.env.TEST_RA_SSH_PW = "resolved_ssh_secret";
   try {
     fs.mkdirSync(path.join(workDir, "project", "system"), { recursive: true });
     fs.writeFileSync(
@@ -40,12 +44,13 @@ test("db-scanner: parseDbConnectionConfig parses backticks, unquoted fallback, a
 - **連接埠 (Port)**：\`3307\`
 - **資料庫名稱 (Database / Schema)**：\`legacy_erp\`
 - **帳號 (Username)**：\`ro_user\`
-- **密碼 (Password)**：\`secret123\`
+- **密碼 (Password)**：\`env:TEST_RA_DB_PW\`
 - **共用代碼表清單 (Code Tables)**：\`sys_code, bad table name, order_type\`
 - **啟用跳板機 (SSH Enabled)**：\`true\`
 - **跳板機主機 (SSH Host)**：\`bastion.internal\`
 - **跳板機連接埠 (SSH Port)**：\`2222\`
 - **跳板機帳號 (SSH Username)**：\`ops\`
+- **跳板機密碼 (SSH Password)**：\`\${TEST_RA_SSH_PW}\`
 `,
       "utf8"
     );
@@ -57,16 +62,21 @@ test("db-scanner: parseDbConnectionConfig parses backticks, unquoted fallback, a
     assert.equal(cfg.port, "3307");
     assert.equal(cfg.database, "legacy_erp");
     assert.equal(cfg.username, "ro_user");
-    assert.equal(cfg.password, "secret123");
+    assert.equal(cfg.password, "resolved_db_secret");
     assert.deepEqual(cfg.codeTables, ["sys_code", "order_type"]);
     assert.equal(cfg.sshEnabled, true);
     assert.equal(cfg.sshHost, "bastion.internal");
     assert.equal(cfg.sshPort, "2222");
     assert.equal(cfg.sshUser, "ops");
+    assert.equal(cfg.sshPassword, "resolved_ssh_secret");
     assert.equal(cfg.sshStrictHostKeyChecking, "yes");
 
     assert.equal(escapeSqlLiteral("o'reilly"), "o''reilly");
   } finally {
+    if (prevDbPass === undefined) delete process.env.TEST_RA_DB_PW;
+    else process.env.TEST_RA_DB_PW = prevDbPass;
+    if (prevSshPass === undefined) delete process.env.TEST_RA_SSH_PW;
+    else process.env.TEST_RA_SSH_PW = prevSshPass;
     fs.rmSync(workDir, { recursive: true, force: true });
   }
 });
@@ -200,6 +210,8 @@ if (sql.includes("information_schema.columns")) {
       mockBin,
       "sqlcmd",
       `const args = process.argv.slice(2);
+if (args.includes("-P")) process.exit(3);
+if (process.env.SQLCMDPASSWORD !== "pw") process.exit(4);
 const sql = args[args.indexOf("-Q") + 1] || "";
 if (sql.includes("sys.columns")) {
   console.log("mssql_inv\\tinv_id\\tint\\tNO\\t\\tPK\\t發票號");
@@ -220,7 +232,11 @@ if (sql.includes("sys.columns")) {
       mockBin,
       "sqlplus",
       `const fs = require("fs");
+const args = process.argv.slice(2);
+if (!args.includes("/NOLOG")) process.exit(3);
+if (args.some((a) => a.includes("tiger"))) process.exit(4);
 const sql = fs.readFileSync(0, "utf8");
+if (!sql.includes('CONNECT scott/"tiger"@//127.0.0.1:1521/ORCL')) process.exit(5);
 if (!sql.includes("SET TRANSACTION READ ONLY;")) process.exit(2);
 if (sql.includes("USER_TAB_COLUMNS")) {
   console.log("ORA_ACCT\\tACCT_ID\\tNUMBER(10)\\tN\\t帳號ID");

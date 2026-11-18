@@ -34,6 +34,22 @@ function parseDbConnectionConfig(cwd) {
     ? rawHostKeyPolicy
     : "yes";
 
+  const resolveSecretValue = (rawVal, fallbackEnvName) => {
+    const val = (rawVal || "").trim();
+    const envRefMatch = val.match(/^(?:env:([A-Za-z_][A-Za-z0-9_]*)|\$\{([A-Za-z_][A-Za-z0-9_]*)\})$/);
+    if (envRefMatch) {
+      const varName = envRefMatch[1] || envRefMatch[2];
+      if (!process.env[varName]) {
+        console.warn(`[scandb 提示] db-connection.md 引用了環境變數 ${varName}，但目前尚未設定。`);
+      }
+      return process.env[varName] || "";
+    }
+    if (!val && fallbackEnvName && process.env[fallbackEnvName]) {
+      return process.env[fallbackEnvName];
+    }
+    return val;
+  };
+
   return {
     enabled:
       extract("(?:啟用資料庫掃描|启用数据库扫描|Enabled|DB スキャン有効化|DB 스캔 활성화)").toLowerCase() ===
@@ -43,7 +59,10 @@ function parseDbConnectionConfig(cwd) {
     port: extract("(?:連接埠|端口|Port|ポート|포트)(?:\\s*\\(Port\\))?"),
     database: extract("(?:資料庫名稱|数据库名称|Database \\/ Schema|データベース\\/スキーマ|데이터베이스\\/스키마)"),
     username: extract("(?:帳號|账号|Username|ユーザー名|계정)(?:\\s*\\(Username\\))?"),
-    password: extract("(?:密碼|密码|Password|パスワード|비밀번호)(?:\\s*\\(Password\\))?"),
+    password: resolveSecretValue(
+      extract("(?:密碼|密码|Password|パスワード|비밀번호)(?:\\s*\\(Password\\))?"),
+      "RA_DB_PASSWORD"
+    ),
     codeTables: extract("(?:共用代碼表清單|共用代码表清单|Code Tables|コードテーブル|코드 테이블)")
       .split(",")
       .map((s) => s.trim())
@@ -54,7 +73,10 @@ function parseDbConnectionConfig(cwd) {
     sshHost: extract("(?:跳板機主機|跳板机主机|SSH Host|SSH ホスト|SSH 호스트)"),
     sshPort: extract("(?:跳板機連接埠|跳板机端口|SSH Port|SSH ポート|SSH 포트)") || "22",
     sshUser: extract("(?:跳板機帳號|跳板机账号|SSH Username|SSH ユーザー名|SSH 계정)"),
-    sshPassword: extract("(?:跳板機密碼|跳板机密码|SSH Password|SSH パスワード|SSH 비밀번호)"),
+    sshPassword: resolveSecretValue(
+      extract("(?:跳板機密碼|跳板机密码|SSH Password|SSH パスワード|SSH 비밀번호)"),
+      "RA_SSH_PASSWORD"
+    ),
     sshKeyPath: extract("(?:跳板機私鑰路徑|跳板机私钥路径|SSH Private Key Path|SSH 秘密鍵パス|SSH 개인키 경로)"),
     sshStrictHostKeyChecking,
     localTunnelPort:
@@ -715,6 +737,7 @@ function scanPostgres(cwd, cfg, host, port, now) {
 
 function scanMssql(cwd, cfg, host, port, now) {
   const server = port ? `${host},${port}` : host;
+  const env = Object.assign({}, process.env, { SQLCMDPASSWORD: cfg.password });
   const runSqlcmd = (sql) =>
     spawnSync(
       "sqlcmd",
@@ -725,8 +748,6 @@ function scanMssql(cwd, cfg, host, port, now) {
         cfg.database,
         "-U",
         cfg.username,
-        "-P",
-        cfg.password,
         "-K",
         "ReadOnly",
         "-h",
@@ -737,7 +758,7 @@ function scanMssql(cwd, cfg, host, port, now) {
         "-Q",
         `SET NOCOUNT ON; ${sql}`
       ],
-      { encoding: "utf8" }
+      { env, encoding: "utf8" }
     );
 
   const colRes = runSqlcmd(`
@@ -848,8 +869,8 @@ function scanMssql(cwd, cfg, host, port, now) {
 function scanOracle(cwd, cfg, host, port, now) {
   const connectStr = `${cfg.username}/"${cfg.password}"@//${host}:${port || 1521}/${cfg.database}`;
   const runSqlplus = (sql) => {
-    const input = `SET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF LINESIZE 2000 TRIMSPOOL ON\nSET TRANSACTION READ ONLY;\n${sql}\nEXIT;\n`;
-    return spawnSync("sqlplus", ["-S", connectStr], { input, encoding: "utf8" });
+    const input = `CONNECT ${connectStr}\nSET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF LINESIZE 2000 TRIMSPOOL ON\nSET TRANSACTION READ ONLY;\n${sql}\nEXIT;\n`;
+    return spawnSync("sqlplus", ["-S", "/NOLOG"], { input, encoding: "utf8" });
   };
 
   const colRes = runSqlplus(`

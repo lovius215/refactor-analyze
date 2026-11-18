@@ -203,6 +203,10 @@ function initProject(args = []) {
   }
 
   printResultList("init", results);
+  try {
+    const dbConnAbs = path.join(cwd, "project", "system", "db-connection.md");
+    if (fs.existsSync(dbConnAbs)) fs.chmodSync(dbConnAbs, 0o600);
+  } catch (_) {}
   console.log(`\n專案主要語言已設定為: ${langConfig.label}`);
   if (targetInfo.targetPath) {
     console.log(`已連結目標系統路徑: ${targetInfo.targetPath}`);
@@ -613,6 +617,12 @@ function upgradeProject(args = []) {
   }
 
   printResultList(dryRun ? "upgrade (dry-run)" : "upgrade", results);
+  if (!dryRun) {
+    try {
+      const dbConnAbs = path.join(cwd, "project", "system", "db-connection.md");
+      if (fs.existsSync(dbConnAbs)) fs.chmodSync(dbConnAbs, 0o600);
+    } catch (_) {}
+  }
 }
 
 function runDoctor() {
