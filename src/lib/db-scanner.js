@@ -13,12 +13,18 @@ function parseDbConnectionConfig(cwd) {
 
   const content = fs.readFileSync(configPath, "utf8");
   const extract = (labelPattern) => {
-    // 1. Prefer backtick-wrapped value: - **Label**：`value`
-    const backtickRe = new RegExp(`${labelPattern}[^\\n\`]*\`([^\`]*)\``, "i");
+    // 1. Prefer backtick-wrapped value on a list item: - **Label**：`value`
+    const backtickRe = new RegExp(
+      `(?:^|\\n)\\s*-\\s*\\*\\*[^\\n]*?${labelPattern}[^\\n]*?\\*\\*\\s*[：:]\\s*\`([^\`]*)\``,
+      "i"
+    );
     const bm = content.match(backtickRe);
     if (bm) return bm[1].trim();
-    // 2. Fallback to unquoted value after colon: - **Label**：value
-    const plainRe = new RegExp(`(?:^|\\n)\\s*-\\s*\\*\\*[^\\n]*${labelPattern}[^\\n]*?\\*\\*\\s*[：:]\\s*([^\\n]+)`, "i");
+    // 2. Fallback to unquoted value after colon on a list item: - **Label**：value
+    const plainRe = new RegExp(
+      `(?:^|\\n)\\s*-\\s*\\*\\*[^\\n]*?${labelPattern}[^\\n]*?\\*\\*\\s*[：:]\\s*([^\\n]+)`,
+      "i"
+    );
     const pm = content.match(plainRe);
     if (pm) {
       const cleaned = pm[1].replace(/<!--[\s\S]*?-->/g, "").trim();

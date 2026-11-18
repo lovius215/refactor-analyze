@@ -27,6 +27,36 @@ function writeExecutable(dir, name, jsBody) {
   return filePath;
 }
 
+test("db-scanner: parseDbConnectionConfig parses official templates/project/system/db-connection.md accurately", () => {
+  const workDir = makeTempDir("ra-dbtpl-");
+  const prevDbPass = process.env.DB_PASSWORD;
+  process.env.DB_PASSWORD = "tpl_env_password";
+  try {
+    runCli(workDir, ["init"]);
+    const cfg = parseDbConnectionConfig(workDir);
+    assert.equal(cfg.enabled, false);
+    assert.equal(cfg.product, "mysql");
+    assert.equal(cfg.host, "127.0.0.1");
+    assert.equal(cfg.port, "3306");
+    assert.equal(cfg.database, "your_database_name");
+    assert.equal(cfg.username, "your_username");
+    assert.equal(cfg.password, "tpl_env_password");
+    assert.deepEqual(cfg.codeTables, []);
+    assert.equal(cfg.sshEnabled, false);
+    assert.equal(cfg.sshHost, "bastion.example.com");
+    assert.equal(cfg.sshPort, "22");
+    assert.equal(cfg.sshUser, "ec2-user");
+    assert.equal(cfg.sshPassword, "");
+    assert.equal(cfg.sshKeyPath, "~/.ssh/id_rsa");
+    assert.equal(cfg.localTunnelPort, "13306");
+    assert.equal(cfg.sshStrictHostKeyChecking, "yes");
+  } finally {
+    if (prevDbPass === undefined) delete process.env.DB_PASSWORD;
+    else process.env.DB_PASSWORD = prevDbPass;
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
 test("db-scanner: parseDbConnectionConfig parses backticks, unquoted fallback, env: secret refs, and StrictHostKeyChecking", () => {
   const workDir = makeTempDir("ra-dbcfg-");
   const prevDbPass = process.env.TEST_RA_DB_PW;

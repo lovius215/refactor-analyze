@@ -28,5 +28,10 @@
 - **跳板機連接埠 (SSH Port)**: `22`
 - **跳板機帳號 (SSH Username)**: `ec2-user`
 - **跳板機密碼 (SSH Password)**: ``
+  *(強烈建議改用下方 SSH 私鑰路徑而非密碼；若需使用密碼，系統將透過 `sshpass -e` 傳遞，並支援 `env:SSH_PASSWORD`)*
 - **跳板機私鑰路徑 (SSH Private Key Path)**: `~/.ssh/id_rsa`
+- **主機金鑰檢查 (StrictHostKeyChecking)**: `yes`
+  *(預設 `yes` 嚴格驗證，請先執行 `ssh-keyscan -p <Port> -H <Host> >> ~/.ssh/known_hosts`；若為動態測試環境可改設 `accept-new`)*
 - **本地轉發連接埠 (Local Tunnel Port)**: `13306`
+
+> 🔒 **檔案權限提醒**：在 macOS/Linux 上本檔會自動設為 `0600`（僅擁有者可讀寫）；在 Windows 上 `chmod 600` 無效果，若為共用主機請手動設定 NTFS 檔案權限，並優先使用 `env:DB_PASSWORD` 避免明文存於磁碟。

@@ -120,9 +120,10 @@ AI 會自動檢查舊系統的 Git 分支與版本，詢問是否向 remote 對�
 - **連接埠 (Port)**: `3306`
 - **資料庫名稱 / Schema (Database / Schema)**: `shop_db`
 - **帳號 (Username)**: `readonly_user`
-- **密碼 (Password)**: `secret123`
+- **密碼 (Password)**: `env:DB_PASSWORD`   <!-- 建議使用環境變數避免明文落盤，亦支援 RA_DB_PASSWORD -->
 - **共用代碼表清單 (Code Tables)**: `SYS_CODE`
 ```
+> 🔒 **資安提示**：`db-connection.md` 在 macOS/Linux 上自動設為 `0600` 權限（Windows 請依需求手動限制 NTFS 權限）；SSH 跳板機預設啟用嚴格主機金鑰檢查（`StrictHostKeyChecking=yes`），建議優先使用 SSH 私鑰（`-i`）而非密碼，並先以 `ssh-keyscan` 加入 `~/.ssh/known_hosts`。
 在終端機執行（或對 AI 輸入 `ras`）：
 ```bash
 refactor-analyze scandb
