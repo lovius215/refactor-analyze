@@ -81,13 +81,19 @@ test("regression: data-flow CRUD aggregation only parses Section 2 and dead-code
 `,
       "utf8"
     );
+    // Use official 6-column dead-code.md template format WITH the instructional blockquote containing "無死程式碼"
     fs.writeFileSync(
       path.join(itemDir, "dead-code.md"),
-      `# 死程式碼
-- **目標系統 Git 分支 / Commit Hash**：\`release/v2\` @ \`deadbeef1234\`
-| 程式檔案名稱 | 行數範圍 | 判定原因 | 代碼 |
-|---|---|---|---|
-| \`src/OldHelper.java\` | L10-L40 | 無人呼叫 | \`void old(){}\` |
+      `# 死程式碼記錄：編號 001
+- **目標系統 Git 分支 (Branch)**：\`release/v2\`
+- **目標系統 Git Commit Hash**：\`deadbeef1234\`
+
+> **強制規範**：若本功能無死程式碼，請明確標示「本編號未發現死程式碼」。
+
+## 1. 死程式碼清單
+| 序號 | Git 分支 | Git Commit Hash | 程式檔案名稱 | 行數範圍 | 判定原因 |
+|---|---|---|---|---|---|
+| \`DC-01\` | \`release/v2\` | \`deadbeef1234\` | \`src/OldHelper.java\` | \`L10-L40\` | 無人呼叫 |
 `,
       "utf8"
     );

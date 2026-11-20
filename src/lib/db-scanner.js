@@ -1054,9 +1054,10 @@ function scanOracle(cwd, cfg, host, port, now) {
   const codeDictEntries = [];
   if (cfg.codeTables && cfg.codeTables.length > 0) {
     for (const ct of cfg.codeTables) {
-      const cols = tableMap.get(ct) || tableMap.get(ct.toUpperCase());
+      const matchedName = tableMap.has(ct) ? ct : tableMap.has(ct.toUpperCase()) ? ct.toUpperCase() : null;
+      const cols = matchedName ? tableMap.get(matchedName) : null;
       if (!cols || cols.length === 0) continue;
-      const safeCt = ct.replace(/"/g, '""');
+      const safeCt = matchedName.replace(/"/g, '""');
       const colExpr = cols.map((c) => `NVL(TO_CHAR("${c.name.replace(/"/g, '""')}"), '')`).join(" || CHR(9) || ");
       const dataRes = runSqlplus(`SELECT ${colExpr} FROM "${safeCt}" WHERE ROWNUM <= 1000;`);
       if (dataRes.status === 0 && !/\b(?:ORA|SP2)-\d+/i.test(dataRes.stdout || "")) {

@@ -587,8 +587,16 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
   const sysDeadCodePath = path.join(cwd, "project", "system", "dead-code.md");
   if (fs.existsSync(deadCodePath) && fs.existsSync(sysDeadCodePath)) {
     const itemDeadCode = fs.readFileSync(deadCodePath, "utf8");
-    if (!itemDeadCode.includes("無死程式碼") && !itemDeadCode.includes("(待 AI 分析填寫)")) {
-      const lines = itemDeadCode.split("\n");
+    const nonQuoteDeadCode = itemDeadCode
+      .split("\n")
+      .filter((l) => !l.trim().startsWith(">"))
+      .join("\n");
+    if (
+      !nonQuoteDeadCode.includes("未發現死程式碼") &&
+      !nonQuoteDeadCode.includes("無死程式碼") &&
+      !nonQuoteDeadCode.includes("(待 AI 分析填寫)")
+    ) {
+      const lines = nonQuoteDeadCode.split("\n");
       const foundRows = [];
       for (const line of lines) {
         if (line.startsWith("|") && !line.includes("程式檔案名稱") && !line.includes("---") && !line.includes("待分析")) {
@@ -596,14 +604,30 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
             .split("|")
             .map((p) => p.trim())
             .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-          if (parts.length >= 4) {
-            foundRows.push(parts);
+          if (parts.length >= 6) {
+            // Official 6-column template: 序號 | Git 分支 | Git Commit Hash | 程式檔案名稱 | 行數範圍 | 判定原因
+            foundRows.push({
+              branch: parts[1].replace(/`/g, "").trim(),
+              commit: parts[2].replace(/`/g, "").trim(),
+              filePath: parts[3].replace(/`/g, "").trim(),
+              lineRange: parts[4].replace(/`/g, "").trim(),
+              reason: parts[5].trim()
+            });
+          } else if (parts.length >= 4) {
+            // Compact 4-column format: 程式檔案名稱 | 行數範圍 | 判定原因 | 代碼
+            foundRows.push({
+              branch: "",
+              commit: "",
+              filePath: parts[0].replace(/`/g, "").trim(),
+              lineRange: parts[1].replace(/`/g, "").trim(),
+              reason: parts[2].trim()
+            });
           }
         }
       }
 
       if (foundRows.length > 0) {
-        // Extract Git branch & commit hash from item dead-code.md metadata
+        // Extract fallback Git branch & commit hash from item dead-code.md metadata
         let itemBranch = "-";
         let itemCommit = "-";
         const combinedGit = itemDeadCode.match(/目標系統 Git 分支\s*\/\s*Commit Hash\*\*：[ \t]*`([^`]+)`\s*@\s*`([^`]+)`/);
@@ -621,13 +645,15 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
         const sepMarker = "|---|---|---|---|---|---|";
         const sepIdx = sysDeadCode.indexOf(sepMarker);
         for (const r of foundRows) {
-          const filePath = r[0].replace(/`/g, "").trim();
-          if (!filePath) continue;
+          const filePath = r.filePath;
+          if (!filePath || filePath === "-" || filePath === "無") continue;
+          const rowBranch = r.branch && r.branch !== "-" ? r.branch : itemBranch;
+          const rowCommit = r.commit && r.commit !== "-" ? r.commit : itemCommit;
           const alreadyExists = sysDeadCode
             .split("\n")
             .some((l) => l.startsWith("|") && l.includes(`\`${normId}\``) && l.includes(`\`${filePath}\``));
           if (alreadyExists) continue;
-          const tableRow = `| \`${normId}\` | \`${itemBranch}\` | \`${itemCommit}\` | \`${filePath}\` | ${r[1]} | ${r[2] || "-"} |\n`;
+          const tableRow = `| \`${normId}\` | \`${rowBranch}\` | \`${rowCommit}\` | \`${filePath}\` | ${r.lineRange || "-"} | ${r.reason || "-"} |\n`;
           if (sysDeadCode.includes("| `system` |")) {
             sysDeadCode = sysDeadCode.replace("| `system` |", tableRow + "| `system` |");
           } else if (sepIdx !== -1) {
