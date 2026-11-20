@@ -8,7 +8,7 @@ description: 用 init、scandb、analyze <編號>、reanalyze <編號>、commit 
 ## 最高指導原則：禁止 AI 幻想鐵律（Zero-Hallucination Rule）
 
 - **沒有來源依據，絕對不要亂寫（No Source, No Write）**：
-  - 所有產出的系統型態、技術棧、架構、進入點參數（Request/Response/Input/Output Args）、業務邏輯、資料流、SQL 語句、依賴關係与死程式碼，**必須 100% 來自實際讀取到的原始碼、設定檔或 `scandb` 抓取的真實資料庫結構**。
+  - 所有產出的系統型態、技術棧、架構、進入點參數（Request/Response/Input/Output Args）、業務邏輯、資料流、SQL 語句、依賴關係與死程式碼，**必須 100% 來自實際讀取到的原始碼、設定檔或 `scandb` 抓取的真實資料庫結構**。
   - 每一條業務規則、計算公式、驗證條件與狀態轉換，**必須標註原始碼檔案路徑與行號範圍**（如 `` `src/service/OrderService.java#L45-L92` ``）或資料庫表名/欄位。
 - **禁止憑常識自行腦補**：
   - 凡是程式碼或資料庫中無註解、語意不明的欄位定義、未知狀態碼（Magic Numbers）或缺少的外部實作，**一律禁止猜測，強制寫入 `project/<編號>/backlog.md`**，待使用者補充後執行 `reanalyze <編號>` 更新。

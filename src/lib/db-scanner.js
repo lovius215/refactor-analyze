@@ -92,6 +92,14 @@ function escapeSqlLiteral(val) {
   return String(val || "").replace(/'/g, "''");
 }
 
+function splitOutputLines(stdout) {
+  return (stdout || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((l) => l.replace(/\r$/, ""))
+    .filter(Boolean);
+}
+
 function getDefaultDbPort(product) {
   const p = String(product || "").toLowerCase();
   if (p === "mysql" || p === "mariadb") return "3306";
@@ -279,7 +287,10 @@ function scanSqlite(cwd, cfg, now) {
     const res = spawnSync("sqlite3", ["-readonly", "-separator", "\t", dbFile, sql], { encoding: "utf8" });
     if (res.status !== 0 && /unknown option|unrecognized option/i.test(res.stderr || "")) {
       // Fallback to read-only URI when older sqlite3 CLI doesn't support -readonly flag
-      const roUri = `file:${dbFile.replace(/\\/g, "/")}?mode=ro`;
+      const encodedPath = encodeURI(dbFile.replace(/\\/g, "/"))
+        .replace(/\?/g, "%3F")
+        .replace(/#/g, "%23");
+      const roUri = `file:${encodedPath}?mode=ro`;
       return spawnSync("sqlite3", ["-separator", "\t", roUri, sql], { encoding: "utf8" });
     }
     return res;
@@ -463,7 +474,7 @@ function scanMysql(cwd, cfg, host, port, now) {
   }
 
   const tableComments = new Map();
-  for (const line of (tblRes.stdout || "").split("\n").filter(Boolean)) {
+  for (const line of splitOutputLines(tblRes.stdout)) {
     const [tName, tType, tComment] = line.split("\t");
     if (tType === "BASE TABLE") tableComments.set(tName, tComment || "");
   }
@@ -518,14 +529,14 @@ function scanMysql(cwd, cfg, host, port, now) {
   warnIfQueryFailed("MySQL", "TRIGGERS", trigRes);
 
   const fkByTable = new Map();
-  for (const line of (fkRes.stdout || "").split("\n").filter(Boolean)) {
+  for (const line of splitOutputLines(fkRes.stdout)) {
     const [tName, colName, refTable, refCol, rule] = line.split("\t");
     if (!fkByTable.has(tName)) fkByTable.set(tName, []);
     fkByTable.get(tName).push({ column: colName, refTable, refColumn: refCol, rule: rule || "" });
   }
 
   const idxByTable = new Map();
-  for (const line of (idxRes.stdout || "").split("\n").filter(Boolean)) {
+  for (const line of splitOutputLines(idxRes.stdout)) {
     const [tName, idxName, nonUnique, cols] = line.split("\t");
     if (!idxByTable.has(tName)) idxByTable.set(tName, []);
     idxByTable.get(tName).push({
@@ -536,7 +547,7 @@ function scanMysql(cwd, cfg, host, port, now) {
   }
 
   const tableMap = new Map();
-  for (const line of (colRes.stdout || "").split("\n").filter(Boolean)) {
+  for (const line of splitOutputLines(colRes.stdout)) {
     const [tName, cName, cType, isNull, cDef, cKey, cComment] = line.split("\t");
     if (!tableComments.has(tName) && tableComments.size > 0) continue; // skip views in columns table
     if (!tableMap.has(tName)) tableMap.set(tName, []);
@@ -592,17 +603,16 @@ function scanMysql(cwd, cfg, host, port, now) {
   const codeDictEntries = [];
   if (cfg.codeTables && cfg.codeTables.length > 0) {
     for (const ct of cfg.codeTables) {
-      const cols = tableMap.get(ct);
+      const bareName = ct.includes(".") ? ct.split(".").pop() : ct;
+      const matchedName = Array.from(tableMap.keys()).find((k) => k.toLowerCase() === bareName.toLowerCase());
+      const cols = matchedName ? tableMap.get(matchedName) : null;
       if (!cols || cols.length === 0) continue;
-      const safeCt = ct.replace(/`/g, "``");
+      const safeCt = matchedName.replace(/`/g, "``");
       const safeSchema = (cfg.database || "").replace(/`/g, "``");
       const dataRes = runMysql(`SELECT * FROM \`${safeSchema}\`.\`${safeCt}\` LIMIT 1000;`);
       if (dataRes.status === 0) {
-        const dataRows = (dataRes.stdout || "")
-          .split("\n")
-          .filter(Boolean)
-          .map((l) => l.split("\t"));
-        codeDictEntries.push({ tableName: ct, columns: cols.map((c) => c.name), rows: dataRows });
+        const dataRows = splitOutputLines(dataRes.stdout).map((l) => l.split("\t"));
+        codeDictEntries.push({ tableName: matchedName, columns: cols.map((c) => c.name), rows: dataRows });
       }
     }
   }
@@ -837,6 +847,7 @@ function scanMssql(cwd, cfg, host, port, now) {
         cfg.database,
         "-U",
         cfg.username,
+        "-b",
         "-K",
         "ReadOnly",
         "-h",
@@ -956,16 +967,18 @@ function scanMssql(cwd, cfg, host, port, now) {
   const codeDictEntries = [];
   if (cfg.codeTables && cfg.codeTables.length > 0) {
     for (const ct of cfg.codeTables) {
-      const cols = tableMap.get(ct);
+      const bareName = ct.includes(".") ? ct.split(".").pop() : ct;
+      const matchedName = Array.from(tableMap.keys()).find((k) => k.toLowerCase() === bareName.toLowerCase());
+      const cols = matchedName ? tableMap.get(matchedName) : null;
       if (!cols || cols.length === 0) continue;
-      const safeCt = ct.replace(/\]/g, "]]");
-      const dataRes = runSqlcmd(`SELECT TOP 1000 * FROM [${safeCt}];`);
+      const safeRef = ct
+        .split(".")
+        .map((seg) => `[${seg.replace(/\]/g, "]]")}]`)
+        .join(".");
+      const dataRes = runSqlcmd(`SELECT TOP 1000 * FROM ${safeRef};`);
       if (dataRes.status === 0) {
-        const dataRows = (dataRes.stdout || "")
-          .split("\n")
-          .filter(Boolean)
-          .map((l) => l.trim().split("\t"));
-        codeDictEntries.push({ tableName: ct, columns: cols.map((c) => c.name), rows: dataRows });
+        const dataRows = splitOutputLines(dataRes.stdout).map((l) => l.trim().split("\t"));
+        codeDictEntries.push({ tableName: matchedName, columns: cols.map((c) => c.name), rows: dataRows });
       }
     }
   }

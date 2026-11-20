@@ -77,8 +77,12 @@ function extractVouchersFromText(text, docName) {
 
 function parseBacklogVouchers(backlogContent) {
   const vouchers = new Map();
-  const lines = (backlogContent || "").split("\n");
+  const lines = (backlogContent || "").replace(/\r\n/g, "\n").split("\n");
   for (const line of lines) {
+    // Stop before Section 2 (Reality Check) so 6-column verification rows never overwrite Section 1 vouchers
+    if (/^##\s+2\./.test(line) || /真實資料真偽驗證探針|Reality Check/i.test(line)) {
+      break;
+    }
     if (
       !line.startsWith("|") ||
       line.includes("憑證編號") ||

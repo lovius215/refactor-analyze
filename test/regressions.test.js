@@ -364,3 +364,88 @@ test("regression: pdf-exporter flushes unclosed code block and sanitizes javascr
   assert.match(html, /<a href="https:\/\/example\.com">ok<\/a>/);
   assert.match(html, /<pre><code class="lang-sql">SELECT 1;<\/code><\/pre>/);
 });
+
+test("regression: backlog.md Section 2 Reality Check does not overwrite Section 1 voucher or corrupt verify/commit", () => {
+  const workDir = makeTempDir("ra-blsec2-");
+  try {
+    runCli(workDir, ["init"]);
+    spawnSync("git", ["config", "user.email", "t@t.com"], { cwd: workDir });
+    spawnSync("git", ["config", "user.name", "t"], { cwd: workDir });
+    runCli(workDir, ["analyze", "001"]);
+    const itemDir = path.join(workDir, "project", "001");
+
+    for (const f of ["ui-behavior.md", "data-flow.md", "sql.md", "dependencies.md", "dead-code.md"]) {
+      fs.writeFileSync(path.join(itemDir, f), `# ${f}\nOK\n`, "utf8");
+    }
+    // analysis.md has two complexity lines: header still 待評估, Section 3 updated to 高
+    fs.writeFileSync(
+      path.join(itemDir, "analysis.md"),
+      "# 分析\n- **複雜度等級**：`待評估`\n- **目前的狀態**：`分析中`\n## 3. 複雜度\n- **複雜度等級**：`高`\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(itemDir, "business-logic.md"),
+      "# 業務邏輯\n- 規則：`[Human: 王經理]#BL-01`\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(itemDir, "backlog.md"),
+      `# Backlog
+## 1. 業務邏輯與欄位憑證清單 (Knowledge Vouchers)
+| 憑證 ID | 類型 | 位置 | 待確認問題 | 結論 | 來源 | 佐證 | 拍板人 | 範圍 | 狀態 |
+|---|---|---|---|---|---|---|---|---|---|
+| \`BL-01\` | 狀態碼 | ORDERS.STS | 9代表什麼 | 逾時取消 | Human | 會議 | 王經理 | 全系統通用 | 已釐清 |
+
+## 2. 真實資料真偽驗證探針 (Reality Check — 選填)
+| 憑證 ID | 驗證項目 | 驗證 SQL | 實際結果 | 因應方案 | 驗證人 |
+|---|---|---|---|---|---|
+| \`BL-01\` | 檢查歷史髒資料 | SELECT DISTINCT STS FROM ORDERS | 僅 0/1/9 | 無需清洗 | DBA老王(待確認名單) |
+`,
+      "utf8"
+    );
+
+    const verRes = verifySingleItem(workDir, "001");
+    assert.equal(verRes.valid, true, `Section 2 must not overwrite Section 1 voucher: ${verRes.errors.join("; ")}`);
+
+    // Force-stage db-connection.md on unborn branch -> commit must still exclude it!
+    spawnSync("git", ["add", "-f", "project/system/db-connection.md"], { cwd: workDir });
+    const commitRes = runCli(workDir, ["commit", "001"]);
+    assert.equal(commitRes.status, 0, `commit failed: ${commitRes.stderr}`);
+    assert.match(commitRes.stdout, /狀態為: 已完成/);
+
+    const committedFiles = spawnSync("git", ["show", "--name-only", "--pretty=format:", "HEAD"], {
+      cwd: workDir,
+      encoding: "utf8"
+    }).stdout;
+    assert.doesNotMatch(committedFiles, /db-connection\.md/, "db-connection.md must NEVER be committed even on unborn branch");
+
+    // Verify complexity picked non-placeholder 高 from Section 3
+    fs.writeFileSync(
+      path.join(workDir, "project", "system", "domain-flows.md"),
+      `# Flows
+## 2. 資料表與功能編號 CRUD 對照矩陣 (Table CRUD Matrix)
+| 資料表名稱 (\`project/system/db/\`) | \`C\` (新增編號) | \`R\` (查詢編號) | \`U\` (更新編號) | \`D\` (刪除編號) |
+|---|---|---|---|---|
+| 待補充 | - | - | - | - |
+
+## 3. 自訂外部事件表 (User Custom Section)
+| 事件 | 備註 |
+|---|---|
+| \`OrderPaid\` | 必須保留 |
+`,
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(itemDir, "data-flow.md"),
+      `## 2. 資料庫資料表與欄位讀寫映射\n| 資料表名稱 | 操作 | 欄位 |\n|---|---|---|\n| \`orders\` | C | id |\n`,
+      "utf8"
+    );
+    aggregateDomainFlowsAndDeadCode(workDir, "001");
+    const flows = fs.readFileSync(path.join(workDir, "project", "system", "domain-flows.md"), "utf8");
+    assert.match(flows, /`orders`/);
+    assert.match(flows, /## 3\. 自訂外部事件表/);
+    assert.match(flows, /`OrderPaid`/);
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});

@@ -404,8 +404,13 @@ function commitItem(args = []) {
     if (!verifyRes.valid && !forceCommit) {
       finalStatus = "待確認 (需補齊來源引用)";
     } else if (fs.existsSync(backlogPath)) {
-      const backlogContent = fs.readFileSync(backlogPath, "utf8");
-      const pendingLines = backlogContent.split("\n").filter((l) => {
+      const backlogContent = fs.readFileSync(backlogPath, "utf8").replace(/\r\n/g, "\n");
+      const sec1Lines = [];
+      for (const l of backlogContent.split("\n")) {
+        if (/^##\s+2\./.test(l) || /真實資料真偽驗證探針|Reality Check/i.test(l)) break;
+        sec1Lines.push(l);
+      }
+      const pendingLines = sec1Lines.filter((l) => {
         if (
           !l.startsWith("|") ||
           l.includes("憑證 ID") ||
@@ -431,9 +436,14 @@ function commitItem(args = []) {
 
     if (fs.existsSync(analysisPath)) {
       let analysisContent = fs.readFileSync(analysisPath, "utf8");
-      const compMatch = analysisContent.match(/-\s*\*\*複雜度等級\*\*：`([^`]+)`/);
-      if (compMatch && compMatch[1]) {
-        finalComplexity = compMatch[1].trim();
+      const compMatches = Array.from(analysisContent.matchAll(/-\s*\*\*複雜度等級\*\*：`([^`]+)`/g))
+        .map((m) => m[1].trim())
+        .filter(Boolean);
+      const nonPlaceholderComp = compMatches.find((c) => c !== "待評估");
+      if (nonPlaceholderComp) {
+        finalComplexity = nonPlaceholderComp;
+      } else if (compMatches.length > 0) {
+        finalComplexity = compMatches[0];
       }
       analysisContent = analysisContent.replace(/(-\s*\*\*目前的狀態\*\*：`)[^`]+(`)/, `$1${finalStatus}$2`);
       fs.writeFileSync(analysisPath, analysisContent, "utf8");
@@ -446,8 +456,15 @@ function commitItem(args = []) {
     console.log(`[Commit] 準備提交目前工作區分析結果...`);
   }
 
-  // 安全防護：確保 db-connection.md 絕不被加入 Git commit
-  spawnSync("git", ["reset", "HEAD", "project/system/db-connection.md"], { cwd, encoding: "utf8" });
+  // 安全防護：確保 db-connection.md 絕不被加入 Git commit（同時相容尚未建立首次 commit 的 unborn branch）
+  const unstageDbConn = () => {
+    spawnSync("git", ["reset", "HEAD", "--", "project/system/db-connection.md"], { cwd, encoding: "utf8" });
+    spawnSync("git", ["rm", "--cached", "--ignore-unmatch", "project/system/db-connection.md"], {
+      cwd,
+      encoding: "utf8"
+    });
+  };
+  unstageDbConn();
 
   const candidatePaths = ["project", "AGENTS.md", "skills", "rules", ".gitignore", "readme.md"].filter((p) =>
     fs.existsSync(path.join(cwd, p))
@@ -458,7 +475,7 @@ function commitItem(args = []) {
       encoding: "utf8"
     });
   }
-  spawnSync("git", ["reset", "HEAD", "project/system/db-connection.md"], { cwd, encoding: "utf8" });
+  unstageDbConn();
 
   const commitMsg = itemId
     ? `docs(${itemId}): 確認編號 ${itemId} 重構分析並更新 index.md 狀態`

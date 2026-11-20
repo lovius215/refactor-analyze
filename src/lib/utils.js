@@ -521,8 +521,11 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
       const secIdx = domainFlows.indexOf(matrixHeader);
       if (secIdx !== -1) {
         const beforeSec = domainFlows.slice(0, secIdx + matrixHeader.length);
-        const afterSec = domainFlows.slice(secIdx + matrixHeader.length);
-        const afterLines = afterSec.split("\n");
+        const afterSecFull = domainFlows.slice(secIdx + matrixHeader.length).replace(/\r\n/g, "\n");
+        const nextHeadingMatch = afterSecFull.match(/\n(?=##\s+)/);
+        const secBody = nextHeadingMatch ? afterSecFull.slice(0, nextHeadingMatch.index) : afterSecFull;
+        const tailAfterSection = nextHeadingMatch ? afterSecFull.slice(nextHeadingMatch.index) : "";
+        const afterLines = secBody.split("\n");
         const existingTableRows = new Map();
         const nonTableLines = [];
 
@@ -571,12 +574,13 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
 
         const tableHeader =
           "\n\n| 資料表名稱 (`project/system/db/`) | `C` (新增編號) | `R` (查詢編號) | `U` (更新編號) | `D` (刪除編號) |\n|---|---|---|---|---|\n";
+        const extraSecNotes = nonTableLines.filter((l) => !l.startsWith("|") && l.trim()).join("\n");
         domainFlows =
           beforeSec +
           tableHeader +
           newTableRows +
-          "\n" +
-          nonTableLines.filter((l) => !l.startsWith("|") && l.trim()).join("\n");
+          (extraSecNotes ? "\n" + extraSecNotes + "\n" : "") +
+          tailAfterSection;
         fs.writeFileSync(domainFlowsPath, domainFlows.trimEnd() + "\n", "utf8");
       }
     }
