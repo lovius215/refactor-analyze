@@ -5,20 +5,21 @@
 `refactor-analyze init` 會在工作區建立 `project/system/db-connection.md`，包含：
 - **資料庫產品（Database Product）**：`mysql` | `mariadb` | `postgres` | `mssql` | `oracle` | `sqlite`
 - **連線路徑資訊**：`Host`、`Port`、`Database / Schema`（或 SQLite 檔案路徑）
-- **認證資訊**：`Username`（帳號）、`Password`（密碼）
+- **認證資訊**：`Username`（帳號）、`Password`（密碼，**強烈建議填寫 `env:DB_PASSWORD` / `${DB_PASSWORD}` 或透過 `RA_DB_PASSWORD` 環境變數傳入，避免明文落盤**）
 - **跳板機設定（SSH Jump Host / Bastion，選填）**：
   - `SSH Enabled`：`true` / `false`
-  - `SSH Host`、`SSH Port`、`SSH User`、`SSH Password` 或 `SSH Key Path`
+  - `SSH Host`、`SSH Port`、`SSH User`、`SSH Key Path`（強烈建議私鑰，優於 `SSH Password`）、`StrictHostKeyChecking`（預設 `yes` 嚴格檢查）
 
 ## 2. 資安與唯讀鐵律（Security & Read-Only Rules）
 
-1. **禁止提交帳密至 Git 與禁止讀取帳密至 AI Context**：
-   - `project/system/db-connection.md` 已預設加入 `.gitignore`。
+1. **禁止提交帳密至 Git、禁止進 `ps` 參數列與禁止進 AI Context**：
+   - `project/system/db-connection.md` 已預設加入 `.gitignore`（在 macOS/Linux 自動設為 `0600` 權限；Windows 共用主機請另設 NTFS 權限）。
    - 無論是 CLI 或 AI 執行 `commit` 時，**嚴禁執行 `git add -f project/system/db-connection.md` 或將帳密複製到其他追蹤檔案中**。
    - **資安防護**：當使用者在 AI 對話輸入 `refactor:scandb` (`ras`) 時，AI **只可呼叫本機 CLI `refactor-analyze scandb` 執行掃描，嚴禁直接讀取或印出 `db-connection.md` 內的明文密碼至 AI 對話框**。
+   - **避免本機行程外洩**：MySQL (`MYSQL_PWD`)、PostgreSQL (`PGPASSWORD`)、SQL Server (`SQLCMDPASSWORD`) 與 Oracle (`sqlplus -S /NOLOG` + stdin `CONNECT`) 皆不透過命令列參數傳遞密碼。
 2. **強制唯讀帳號與唯讀 Session（Read-Only Introspection）**：
    - 強烈要求使用者於 `db-connection.md` 配置僅具 `SELECT` 權限的唯讀資料庫帳號（Read-Only Account）。
-   - `scandb` 連線時在程式端強制啟用唯讀模式（SQLite `-readonly`、MySQL `SET SESSION TRANSACTION READ ONLY`、PostgreSQL `default_transaction_read_only=on`、SQL Server `sqlcmd -K ReadOnly`、Oracle `SET TRANSACTION READ ONLY`），並透過獨立 SSH ControlMaster Socket 管理跳板機通道（不使用危險的 `pkill -f`）。
+   - `scandb` 連線時在程式端強制啟用唯讀模式（SQLite `-readonly` / `file:...?mode=ro`、MySQL `SET SESSION TRANSACTION READ ONLY`、PostgreSQL `default_transaction_read_only=on`、SQL Server `sqlcmd -b -K ReadOnly`、Oracle `SET TRANSACTION READ ONLY`），並透過獨立 SSH ControlMaster Socket 管理跳板機通道（不使用危險的 `pkill -f`）。
    - **嚴禁執行任何 `INSERT`、`UPDATE`、`DELETE`、`DROP`、`ALTER`、`TRUNCATE` 或會修改業務資料之語句。**
 
 ## 3. 產出結構與省 Token 拆檔原則

@@ -325,7 +325,7 @@ function scanSqlite(cwd, cfg, now) {
 
       const fkMap = new Map();
       const fkList = [];
-      for (const fkLine of (fkRes.stdout || "").split("\n").filter(Boolean)) {
+      for (const fkLine of splitOutputLines(fkRes.stdout)) {
         const p = fkLine.split("\t");
         // id, seq, table, from, to, on_update, on_delete, match
         if (p.length >= 5) {
@@ -341,16 +341,14 @@ function scanSqlite(cwd, cfg, now) {
 
       const idxList = [];
       const colIdxSet = new Set();
-      for (const idxLine of (idxListRes.stdout || "").split("\n").filter(Boolean)) {
+      for (const idxLine of splitOutputLines(idxListRes.stdout)) {
         const p = idxLine.split("\t");
         // seq, name, unique, origin, partial
         if (p.length >= 2) {
           const idxName = p[1];
           const isUnique = p[2] === "1";
           const infoRes = runSqlite(`PRAGMA index_info("${idxName.replace(/"/g, '""')}");`);
-          const idxCols = (infoRes.stdout || "")
-            .split("\n")
-            .filter(Boolean)
+          const idxCols = splitOutputLines(infoRes.stdout)
             .map((l) => l.split("\t")[2])
             .filter(Boolean);
           idxCols.forEach((c) => colIdxSet.add(c));
@@ -362,10 +360,7 @@ function scanSqlite(cwd, cfg, now) {
         }
       }
 
-      const cols = (colRes.stdout || "")
-        .split("\n")
-        .filter(Boolean)
-        .map((l) => {
+      const cols = splitOutputLines(colRes.stdout).map((l) => {
           const p = l.split("\t");
           const colName = p[1];
           const keyBadges = [];
@@ -576,29 +571,20 @@ function scanMysql(cwd, cfg, host, port, now) {
     });
   }
 
-  const views = (viewRes.stdout || "")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => {
-      const [name, desc] = l.split("\t");
-      return { name, desc: desc || "-" };
-    });
+  const views = splitOutputLines(viewRes.stdout).map((l) => {
+    const [name, desc] = l.split("\t");
+    return { name, desc: desc || "-" };
+  });
 
-  const procs = (procRes.stdout || "")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => {
-      const [name, type, desc] = l.split("\t");
-      return { name, type, desc: desc || "-" };
-    });
+  const procs = splitOutputLines(procRes.stdout).map((l) => {
+    const [name, type, desc] = l.split("\t");
+    return { name, type, desc: desc || "-" };
+  });
 
-  const triggers = (trigRes.stdout || "")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => {
-      const [name, table, timing, desc] = l.split("\t");
-      return { name, table, timing, desc: desc || "-" };
-    });
+  const triggers = splitOutputLines(trigRes.stdout).map((l) => {
+    const [name, table, timing, desc] = l.split("\t");
+    return { name, table, timing, desc: desc || "-" };
+  });
 
   const codeDictEntries = [];
   if (cfg.codeTables && cfg.codeTables.length > 0) {
@@ -714,7 +700,7 @@ function scanPostgres(cwd, cfg, host, port, now) {
 
   const pkSet = new Set();
   const fkByTable = new Map();
-  for (const line of (pkFkRes.stdout || "").split("\n").filter(Boolean)) {
+  for (const line of splitOutputLines(pkFkRes.stdout)) {
     const [tSchema, tName, colName, cType, refTable, refCol] = line.split("\t");
     const key = `${tSchema || "public"}.${tName}`;
     if (cType === "PRIMARY KEY") {
@@ -726,7 +712,7 @@ function scanPostgres(cwd, cfg, host, port, now) {
   }
 
   const idxByTable = new Map();
-  for (const line of (idxRes.stdout || "").split("\n").filter(Boolean)) {
+  for (const line of splitOutputLines(idxRes.stdout)) {
     const [tSchema, tName, idxName, idxDef] = line.split("\t");
     const key = `${tSchema || "public"}.${tName}`;
     if (!idxByTable.has(key)) idxByTable.set(key, []);
@@ -739,7 +725,7 @@ function scanPostgres(cwd, cfg, host, port, now) {
 
   const tableMap = new Map();
   const tableComments = new Map();
-  for (const line of (colRes.stdout || "").split("\n").filter(Boolean)) {
+  for (const line of splitOutputLines(colRes.stdout)) {
     const [schema, tName, cName, cType, isNull, cDef, cComment, tComment] = line.split("\t");
     const effSchema = schema || "public";
     const fullTableName = effSchema !== "public" ? `${effSchema}.${tName}` : tName;
@@ -780,29 +766,20 @@ function scanPostgres(cwd, cfg, host, port, now) {
     });
   }
 
-  const views = (viewRes.stdout || "")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => {
-      const [name, desc] = l.split("\t");
-      return { name, desc: desc || "-" };
-    });
+  const views = splitOutputLines(viewRes.stdout).map((l) => {
+    const [name, desc] = l.split("\t");
+    return { name, desc: desc || "-" };
+  });
 
-  const procs = (procRes.stdout || "")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => {
-      const [name, type, desc] = l.split("\t");
-      return { name, type, desc: desc || "-" };
-    });
+  const procs = splitOutputLines(procRes.stdout).map((l) => {
+    const [name, type, desc] = l.split("\t");
+    return { name, type, desc: desc || "-" };
+  });
 
-  const triggers = (trigRes.stdout || "")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => {
-      const [name, table, timing, desc] = l.split("\t");
-      return { name, table, timing, desc: desc || "-" };
-    });
+  const triggers = splitOutputLines(trigRes.stdout).map((l) => {
+    const [name, table, timing, desc] = l.split("\t");
+    return { name, table, timing, desc: desc || "-" };
+  });
 
   const codeDictEntries = [];
   if (cfg.codeTables && cfg.codeTables.length > 0) {

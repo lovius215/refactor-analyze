@@ -682,11 +682,16 @@ function aggregateDomainDictionary(cwd, itemId) {
 
   if (!fs.existsSync(backlogPath) || !fs.existsSync(dictPath)) return;
 
-  const content = fs.readFileSync(backlogPath, "utf8");
+  const content = fs.readFileSync(backlogPath, "utf8").replace(/\r\n/g, "\n");
   const lines = content.split("\n");
   const vouchersToPromote = [];
+  const isInvalidVoucherField = (val) =>
+    !val || val === "-" || val.startsWith("*(") || val.includes("待確認") || val.includes("待填寫") || val.includes("待分析");
 
   for (const line of lines) {
+    if (/^##\s+2\./.test(line) || /真實資料真偽驗證探針|Reality Check/i.test(line)) {
+      break;
+    }
     if (
       !line.startsWith("|") ||
       line.includes("憑證編號") ||
@@ -715,6 +720,8 @@ function aggregateDomainDictionary(cwd, itemId) {
 
     if (
       status.includes("已釐清") &&
+      !isInvalidVoucherField(conclusion) &&
+      !isInvalidVoucherField(signoff) &&
       (scope.includes("全系統通用") || scope.includes("全域") || scope.toLowerCase().includes("global"))
     ) {
       vouchersToPromote.push({
