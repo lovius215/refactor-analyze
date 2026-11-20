@@ -342,14 +342,14 @@ function refreshItemMetadata(itemRelDir, meta) {
   for (const filePath of files) {
     if (!filePath.endsWith(".md")) continue;
     let content = fs.readFileSync(filePath, "utf8");
-    content = content.replace(/(執行分析的時間日期\*\*：`)[^`]+(`)/g, `$1${meta.ANALYSIS_TIME}$2`);
+    content = content.replace(/(執行分析的時間日期\*\*：`)[^`]+(`)/g, (_, p1, p2) => `${p1}${meta.ANALYSIS_TIME}${p2}`);
     if (meta.GIT_BRANCH && meta.GIT_BRANCH !== "待確認") {
-      content = content.replace(/(目標系統 Git 分支 \(Branch\)\*\*：`)[^`]+(`)/g, `$1${meta.GIT_BRANCH}$2`);
+      content = content.replace(/(目標系統 Git 分支 \(Branch\)\*\*：`)[^`]+(`)/g, (_, p1, p2) => `${p1}${meta.GIT_BRANCH}${p2}`);
     }
     if (meta.GIT_COMMIT && meta.GIT_COMMIT !== "待確認") {
       content = content.replace(
         /(目標系統 Git (?:版本 \(Commit Hash \/ Tag\)|Commit Hash)\*\*：`)[^`]+(`)/g,
-        `$1${meta.GIT_COMMIT}$2`
+        (_, p1, p2) => `${p1}${meta.GIT_COMMIT}${p2}`
       );
     }
     if (
@@ -360,7 +360,7 @@ function refreshItemMetadata(itemRelDir, meta) {
     ) {
       content = content.replace(
         /(目標系統 Git 分支\s*\/\s*Commit Hash\*\*：`)[^`]+(`\s*@\s*`)[^`]+(`)/g,
-        `$1${meta.GIT_BRANCH}$2${meta.GIT_COMMIT}$3`
+        (_, p1, p2, p3) => `${p1}${meta.GIT_BRANCH}${p2}${meta.GIT_COMMIT}${p3}`
       );
     }
     fs.writeFileSync(filePath, content, "utf8");

@@ -659,7 +659,7 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
           if (alreadyExists) continue;
           const tableRow = `| \`${normId}\` | \`${rowBranch}\` | \`${rowCommit}\` | \`${filePath}\` | ${r.lineRange || "-"} | ${r.reason || "-"} |\n`;
           if (sysDeadCode.includes("| `system` |")) {
-            sysDeadCode = sysDeadCode.replace("| `system` |", tableRow + "| `system` |");
+            sysDeadCode = sysDeadCode.replace("| `system` |", () => tableRow + "| `system` |");
           } else if (sepIdx !== -1) {
             const insertPos = sysDeadCode.indexOf(sepMarker) + sepMarker.length;
             sysDeadCode = sysDeadCode.slice(0, insertPos) + "\n" + tableRow.trimEnd() + sysDeadCode.slice(insertPos);

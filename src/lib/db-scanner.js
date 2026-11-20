@@ -92,6 +92,14 @@ function escapeSqlLiteral(val) {
   return String(val || "").replace(/'/g, "''");
 }
 
+function formatSpawnError(res, cliName) {
+  if (res && res.error && res.error.code === "ENOENT") {
+    return `找不到本機命令列工具 "${cliName}"（ENOENT），請先安裝 ${cliName} CLI 並確認已加入 PATH。`;
+  }
+  const msg = `${(res && res.stderr) || ""}\n${(res && res.stdout) || ""}`.trim();
+  return msg || (res && res.error ? res.error.message : "未知錯誤");
+}
+
 function splitOutputLines(stdout) {
   return (stdout || "")
     .replace(/\r\n/g, "\n")
@@ -109,10 +117,10 @@ function getDefaultDbPort(product) {
   return "";
 }
 
-function warnIfQueryFailed(dbLabel, queryName, res) {
+function warnIfQueryFailed(dbLabel, queryName, res, cliName = dbLabel) {
   if (res && res.status !== 0) {
     console.warn(
-      `[scandb 警告] ${dbLabel} 查詢 ${queryName} 失敗（可能權限不足），已略過: ${(res.stderr || res.stdout || "").trim()}`
+      `[scandb 警告] ${dbLabel} 查詢 ${queryName} 失敗（可能權限不足），已略過: ${formatSpawnError(res, cliName)}`
     );
   }
 }
@@ -217,7 +225,7 @@ function scanDatabase(cwd) {
       connectPort = cfg.localTunnelPort;
       console.log(`[SSH 跳板機] 通道建立成功，將透過 ${connectHost}:${connectPort} 唯讀連線至資料庫。`);
     } else {
-      const errText = (sshRes.stderr || "").trim();
+      const errText = formatSpawnError(sshRes, "ssh");
       console.warn(`[SSH 跳板機警告] 無法建立背景 SSH 通道: ${errText}`);
       if (errText.includes("Host key verification failed")) {
         console.warn(
@@ -300,7 +308,7 @@ function scanSqlite(cwd, cfg, now) {
     "SELECT name, type, tbl_name, REPLACE(REPLACE(COALESCE(sql,''), CHAR(10), '\\n'), CHAR(13), '') FROM sqlite_master WHERE type IN ('table','view','trigger') AND name NOT LIKE 'sqlite_%' ORDER BY type, name;"
   );
   if (masterRes.status !== 0) {
-    fail(`無法執行 sqlite3 CLI: ${(masterRes.stderr || "").trim()}`);
+    fail(`無法執行 sqlite3 CLI: ${formatSpawnError(masterRes, "sqlite3")}`);
     return;
   }
 
@@ -464,7 +472,7 @@ function scanMysql(cwd, cfg, host, port, now) {
   `);
 
   if (tblRes.status !== 0) {
-    fail(`[scandb] MySQL/MariaDB 唯讀連線失敗: ${(tblRes.stderr || "").trim()}`);
+    fail(`[scandb] MySQL/MariaDB 唯讀連線失敗: ${formatSpawnError(tblRes, "mysql")}`);
     return;
   }
 
@@ -651,7 +659,7 @@ function scanPostgres(cwd, cfg, host, port, now) {
   `);
 
   if (colRes.status !== 0) {
-    fail(`[scandb] PostgreSQL 唯讀連線失敗: ${(colRes.stderr || "").trim()}`);
+    fail(`[scandb] PostgreSQL 唯讀連線失敗: ${formatSpawnError(colRes, "psql")}`);
     return;
   }
 
@@ -855,7 +863,7 @@ function scanMssql(cwd, cfg, host, port, now) {
   `);
 
   if (colRes.status !== 0) {
-    fail(`[scandb] SQL Server (sqlcmd) 唯讀連線失敗: ${(colRes.stderr || colRes.stdout || "").trim()}`);
+    fail(`[scandb] SQL Server (sqlcmd) 唯讀連線失敗: ${formatSpawnError(colRes, "sqlcmd")}`);
     return;
   }
 
@@ -994,7 +1002,7 @@ function scanOracle(cwd, cfg, host, port, now) {
 
   const colOut = `${colRes.stdout || ""}\n${colRes.stderr || ""}`;
   if (colRes.status !== 0 || /\b(?:ORA|SP2)-\d+/i.test(colOut)) {
-    fail(`[scandb] Oracle (sqlplus) 唯讀連線失敗: ${(colRes.stderr || colRes.stdout || "").trim()}`);
+    fail(`[scandb] Oracle (sqlplus) 唯讀連線失敗: ${formatSpawnError(colRes, "sqlplus")}`);
     return;
   }
 

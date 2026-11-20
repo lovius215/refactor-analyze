@@ -14,7 +14,7 @@ function makeTempDir(prefix) {
 }
 
 function runCli(cwd, args, envExtra = {}) {
-  return spawnSync("node", [binPath, ...args], {
+  return spawnSync(process.execPath, [binPath, ...args], {
     cwd,
     encoding: "utf8",
     env: Object.assign({}, process.env, envExtra)
@@ -128,6 +128,25 @@ test("db-scanner: fails clearly when enabled=true but required fields are missin
     const res = runCli(workDir, ["scandb"]);
     assert.notEqual(res.status, 0);
     assert.match(res.stderr, /找不到有效的「資料庫產品/);
+
+    // Missing DB CLI binary (ENOENT) should print actionable error message instead of blank stderr
+    fs.writeFileSync(
+      connPath,
+      `- **啟用資料庫掃描 (Enabled)**：\`true\`
+- **資料庫產品 (Database Product)**：\`mysql\`
+- **連線主機或檔案路徑 (Host / Path)**：\`127.0.0.1\`
+- **資料庫名稱 (Database / Schema)**：\`shop\`
+`,
+      "utf8"
+    );
+    const emptyBin = makeTempDir("ra-emptybin-");
+    try {
+      const enoentRes = runCli(workDir, ["scandb"], { PATH: emptyBin });
+      assert.notEqual(enoentRes.status, 0);
+      assert.match(enoentRes.stderr, /找不到本機命令列工具 "mysql"/);
+    } finally {
+      fs.rmSync(emptyBin, { recursive: true, force: true });
+    }
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
   }
