@@ -24,6 +24,7 @@ const {
   updateFileFromTemplate,
   listFilesRecursive,
   getOption,
+  getPositionalArgs,
   printResultList,
   fail
 } = require("./lib/utils");
@@ -94,7 +95,8 @@ function main() {
 function initProject(args = []) {
   const includeRules = args.includes("--full");
   const langArg = getOption(args, "--lang");
-  const targetArg = getOption(args, "--target") || args.find((a) => !a.startsWith("-"));
+  const positionals = getPositionalArgs(args, ["--lang", "--target"]);
+  const targetArg = getOption(args, "--target") || positionals[0] || null;
 
   let langConfig = SUPPORTED_LANGS["zh-tw"];
   if (langArg) {
@@ -225,7 +227,8 @@ function initProject(args = []) {
 }
 
 function analyzeItem(args = [], isReanalyze = false) {
-  const rawId = args.find((a) => !a.startsWith("-")) || getOption(args, "--id");
+  const positionals = getPositionalArgs(args, ["--target", "--id"]);
+  const rawId = getOption(args, "--id") || positionals[0] || null;
   const label = isReanalyze ? "reanalyze" : "analyze";
   if (!rawId) {
     fail(`Usage: refactor-analyze ${label} <編號> [--target <path>]`);
@@ -349,6 +352,17 @@ function refreshItemMetadata(itemRelDir, meta) {
         `$1${meta.GIT_COMMIT}$2`
       );
     }
+    if (
+      meta.GIT_BRANCH &&
+      meta.GIT_BRANCH !== "待確認" &&
+      meta.GIT_COMMIT &&
+      meta.GIT_COMMIT !== "待確認"
+    ) {
+      content = content.replace(
+        /(目標系統 Git 分支\s*\/\s*Commit Hash\*\*：`)[^`]+(`\s*@\s*`)[^`]+(`)/g,
+        `$1${meta.GIT_BRANCH}$2${meta.GIT_COMMIT}$3`
+      );
+    }
     fs.writeFileSync(filePath, content, "utf8");
     results.push({ action: "update", target: path.relative(cwd, filePath) });
   }
@@ -357,7 +371,8 @@ function refreshItemMetadata(itemRelDir, meta) {
 
 function commitItem(args = []) {
   const forceCommit = args.includes("--force");
-  const rawId = args.find((a) => !a.startsWith("-")) || getOption(args, "--id");
+  const positionals = getPositionalArgs(args, ["--id"]);
+  const rawId = getOption(args, "--id") || positionals[0] || null;
   const itemId = rawId ? normalizeItemId(rawId) : null;
 
   ensureGitIgnore(cwd);

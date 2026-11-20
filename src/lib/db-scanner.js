@@ -12,28 +12,26 @@ function parseDbConnectionConfig(cwd) {
   }
 
   const content = fs.readFileSync(configPath, "utf8");
-  const extract = (labelPattern) => {
-    // 1. Prefer backtick-wrapped value on a list item: - **Label**：`value`
-    const backtickRe = new RegExp(
-      `(?:^|\\n)\\s*-\\s*\\*\\*[^\\n]*?${labelPattern}[^\\n]*?\\*\\*\\s*[：:]\\s*\`([^\`]*)\``,
-      "i"
-    );
-    const bm = content.match(backtickRe);
-    if (bm) return bm[1].trim();
-    // 2. Fallback to unquoted value after colon on a list item: - **Label**：value
-    const plainRe = new RegExp(
-      `(?:^|\\n)\\s*-\\s*\\*\\*[^\\n]*?${labelPattern}[^\\n]*?\\*\\*\\s*[：:]\\s*([^\\n]+)`,
-      "i"
-    );
-    const pm = content.match(plainRe);
-    if (pm) {
-      const cleaned = pm[1].replace(/<!--[\s\S]*?-->/g, "").trim();
-      if (!cleaned.startsWith("*(") && !cleaned.startsWith("(")) {
+  const lines = content.split("\n");
+  const extract = (labelPattern, excludePattern = null) => {
+    const labelRe = new RegExp(`^\\s*-\\s*\\*\\*([^\\n]*?${labelPattern}[^\\n]*?)\\*\\*\\s*[：:]\\s*(.*)$`, "i");
+    const excludeRe = excludePattern ? new RegExp(excludePattern, "i") : null;
+    for (const line of lines) {
+      const m = line.match(labelRe);
+      if (!m) continue;
+      if (excludeRe && excludeRe.test(m[1])) continue;
+      const rhs = m[2].trim();
+      const bt = rhs.match(/^`([^`]*)`/);
+      if (bt) return bt[1].trim();
+      const cleaned = rhs.replace(/<!--[\s\S]*?-->/g, "").trim();
+      if (cleaned && !cleaned.startsWith("*(") && !cleaned.startsWith("(")) {
         return cleaned;
       }
     }
     return "";
   };
+
+  const sshExclude = "(?:跳板機|跳板机|SSH|本地轉發|本地转发|Local Tunnel|踏み台|점프)";
 
   const rawHostKeyPolicy = extract("(?:StrictHostKeyChecking|主機金鑰檢查|主机密钥检查)").toLowerCase();
   const sshStrictHostKeyChecking = ["yes", "accept-new", "no"].includes(rawHostKeyPolicy)
@@ -58,15 +56,15 @@ function parseDbConnectionConfig(cwd) {
 
   return {
     enabled:
-      extract("(?:啟用資料庫掃描|启用数据库扫描|Enabled|DB スキャン有効化|DB 스캔 활성화)").toLowerCase() ===
+      extract("(?:啟用資料庫掃描|启用数据库扫描|Enabled|DB スキャン有効化|DB 스캔 활성화)", sshExclude).toLowerCase() ===
       "true",
     product: extract("(?:資料庫產品|数据库产品|Database Product|DB 製品|DB 제품)").toLowerCase(),
     host: extract("(?:連線主機或檔案路徑|连接主机或文件路径|Host \\/ Path|ホスト\\/パス|호스트\\/경로)"),
-    port: extract("(?:連接埠|端口|Port|ポート|포트)(?:\\s*\\(Port\\))?"),
+    port: extract("(?:連接埠|端口|Port|ポート|포트)", sshExclude),
     database: extract("(?:資料庫名稱|数据库名称|Database \\/ Schema|データベース\\/スキーマ|데이터베이스\\/스키마)"),
-    username: extract("(?:帳號|账号|Username|ユーザー名|계정)(?:\\s*\\(Username\\))?"),
+    username: extract("(?:帳號|账号|Username|ユーザー名|계정)", sshExclude),
     password: resolveSecretValue(
-      extract("(?:密碼|密码|Password|パスワード|비밀번호)(?:\\s*\\(Password\\))?"),
+      extract("(?:密碼|密码|Password|パスワード|비밀번호)", sshExclude),
       "RA_DB_PASSWORD"
     ),
     codeTables: extract("(?:共用代碼表清單|共用代码表清单|Code Tables|コードテーブル|코드 테이블)")
@@ -92,6 +90,14 @@ function parseDbConnectionConfig(cwd) {
 
 function escapeSqlLiteral(val) {
   return String(val || "").replace(/'/g, "''");
+}
+
+function warnIfQueryFailed(dbLabel, queryName, res) {
+  if (res && res.status !== 0) {
+    console.warn(
+      `[scandb 警告] ${dbLabel} 查詢 ${queryName} 失敗（可能權限不足），已略過: ${(res.stderr || res.stdout || "").trim()}`
+    );
+  }
 }
 
 function scanDatabase(cwd) {
@@ -258,9 +264,10 @@ function scanSqlite(cwd, cfg, now) {
 
   const runSqlite = (sql) => {
     const res = spawnSync("sqlite3", ["-readonly", "-separator", "\t", dbFile, sql], { encoding: "utf8" });
-    if (res.status !== 0) {
-      // Fallback if older sqlite3 CLI doesn't support -readonly flag
-      return spawnSync("sqlite3", ["-separator", "\t", dbFile, sql], { encoding: "utf8" });
+    if (res.status !== 0 && /unknown option|unrecognized option/i.test(res.stderr || "")) {
+      // Fallback to read-only URI when older sqlite3 CLI doesn't support -readonly flag
+      const roUri = `file:${dbFile.replace(/\\/g, "/")}?mode=ro`;
+      return spawnSync("sqlite3", ["-separator", "\t", roUri, sql], { encoding: "utf8" });
     }
     return res;
   };
@@ -490,6 +497,13 @@ function scanMysql(cwd, cfg, host, port, now) {
     WHERE TRIGGER_SCHEMA = '${schema}';
   `);
 
+  warnIfQueryFailed("MySQL", "COLUMNS", colRes);
+  warnIfQueryFailed("MySQL", "FOREIGN_KEYS", fkRes);
+  warnIfQueryFailed("MySQL", "STATISTICS", idxRes);
+  warnIfQueryFailed("MySQL", "VIEWS", viewRes);
+  warnIfQueryFailed("MySQL", "ROUTINES", procRes);
+  warnIfQueryFailed("MySQL", "TRIGGERS", trigRes);
+
   const fkByTable = new Map();
   for (const line of (fkRes.stdout || "").split("\n").filter(Boolean)) {
     const [tName, colName, refTable, refCol, rule] = line.split("\t");
@@ -562,10 +576,33 @@ function scanMysql(cwd, cfg, host, port, now) {
       return { name, table, timing, desc: desc || "-" };
     });
 
+  const codeDictEntries = [];
+  if (cfg.codeTables && cfg.codeTables.length > 0) {
+    for (const ct of cfg.codeTables) {
+      const cols = tableMap.get(ct);
+      if (!cols || cols.length === 0) continue;
+      const safeCt = ct.replace(/`/g, "``");
+      const safeSchema = (cfg.database || "").replace(/`/g, "``");
+      const dataRes = runMysql(`SELECT * FROM \`${safeSchema}\`.\`${safeCt}\` LIMIT 1000;`);
+      if (dataRes.status === 0) {
+        const dataRows = (dataRes.stdout || "")
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => l.split("\t"));
+        codeDictEntries.push({ tableName: ct, columns: cols.map((c) => c.name), rows: dataRows });
+      }
+    }
+  }
+
   writeRoutinesMarkdown(cwd, cfg.product, cfg.database, views, procs, triggers, now);
-  writeDbSchemaSummary(cwd, cfg.product, cfg.database, summaryRows, views, procs, triggers, now, false);
+  if (codeDictEntries.length > 0) {
+    writeCodeDictionaryMarkdown(cwd, codeDictEntries, now);
+  }
+  writeDbSchemaSummary(cwd, cfg.product, cfg.database, summaryRows, views, procs, triggers, now, codeDictEntries.length > 0);
   console.log(
-    `[scandb] 已完成 ${cfg.product} 唯讀掃描：${summaryRows.length} 張表、${views.length} 個 View、${procs.length} 個 SP/Function、${triggers.length} 個 Trigger。`
+    `[scandb] 已完成 ${cfg.product} 唯讀掃描：${summaryRows.length} 張表、${views.length} 個 View、${procs.length} 個 SP/Function、${triggers.length} 個 Trigger${
+      codeDictEntries.length > 0 ? `、${codeDictEntries.length} 張共用代碼表字典` : ""
+    }。`
   );
 }
 
@@ -610,21 +647,21 @@ function scanPostgres(cwd, cfg, host, port, now) {
   }
 
   const pkFkRes = runPsql(`
-    SELECT tc.table_name, kcu.column_name, tc.constraint_type,
+    SELECT tc.table_schema, tc.table_name, kcu.column_name, tc.constraint_type,
            COALESCE(ccu.table_name, ''), COALESCE(ccu.column_name, '')
     FROM information_schema.table_constraints tc
     JOIN information_schema.key_column_usage kcu
       ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
     LEFT JOIN information_schema.constraint_column_usage ccu
       ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema
-    WHERE tc.${schemaFilter.replace("table_schema", "table_schema")}
+    WHERE tc.${schemaFilter}
       AND tc.constraint_type IN ('PRIMARY KEY', 'FOREIGN KEY');
   `);
 
   const idxRes = runPsql(`
-    SELECT tablename, indexname, indexdef
+    SELECT schemaname, tablename, indexname, indexdef
     FROM pg_indexes
-    WHERE schemaname NOT IN ('pg_catalog', 'information_schema');
+    WHERE ${schemaFilter.replace("table_schema", "schemaname")};
   `);
 
   const viewRes = runPsql(`
@@ -646,23 +683,31 @@ function scanPostgres(cwd, cfg, host, port, now) {
     WHERE ${schemaFilter.replace("table_schema", "trigger_schema")};
   `);
 
+  warnIfQueryFailed("PostgreSQL", "CONSTRAINTS", pkFkRes);
+  warnIfQueryFailed("PostgreSQL", "INDEXES", idxRes);
+  warnIfQueryFailed("PostgreSQL", "VIEWS", viewRes);
+  warnIfQueryFailed("PostgreSQL", "ROUTINES", procRes);
+  warnIfQueryFailed("PostgreSQL", "TRIGGERS", trigRes);
+
   const pkSet = new Set();
   const fkByTable = new Map();
   for (const line of (pkFkRes.stdout || "").split("\n").filter(Boolean)) {
-    const [tName, colName, cType, refTable, refCol] = line.split("\t");
+    const [tSchema, tName, colName, cType, refTable, refCol] = line.split("\t");
+    const key = `${tSchema || "public"}.${tName}`;
     if (cType === "PRIMARY KEY") {
-      pkSet.add(`${tName}.${colName}`);
+      pkSet.add(`${key}.${colName}`);
     } else if (cType === "FOREIGN KEY" && refTable) {
-      if (!fkByTable.has(tName)) fkByTable.set(tName, []);
-      fkByTable.get(tName).push({ column: colName, refTable, refColumn: refCol, rule: "FK" });
+      if (!fkByTable.has(key)) fkByTable.set(key, []);
+      fkByTable.get(key).push({ column: colName, refTable, refColumn: refCol, rule: "FK" });
     }
   }
 
   const idxByTable = new Map();
   for (const line of (idxRes.stdout || "").split("\n").filter(Boolean)) {
-    const [tName, idxName, idxDef] = line.split("\t");
-    if (!idxByTable.has(tName)) idxByTable.set(tName, []);
-    idxByTable.get(tName).push({
+    const [tSchema, tName, idxName, idxDef] = line.split("\t");
+    const key = `${tSchema || "public"}.${tName}`;
+    if (!idxByTable.has(key)) idxByTable.set(key, []);
+    idxByTable.get(key).push({
       name: idxName,
       unique: (idxDef || "").includes("UNIQUE") ? "UNIQUE" : "INDEX",
       columns: idxDef || ""
@@ -673,10 +718,12 @@ function scanPostgres(cwd, cfg, host, port, now) {
   const tableComments = new Map();
   for (const line of (colRes.stdout || "").split("\n").filter(Boolean)) {
     const [schema, tName, cName, cType, isNull, cDef, cComment, tComment] = line.split("\t");
-    const fullTableName = schema && schema !== "public" ? `${schema}.${tName}` : tName;
-    if (!tableMap.has(fullTableName)) tableMap.set(fullTableName, { rawName: tName, cols: [] });
+    const effSchema = schema || "public";
+    const fullTableName = effSchema !== "public" ? `${effSchema}.${tName}` : tName;
+    const schemaKey = `${effSchema}.${tName}`;
+    if (!tableMap.has(fullTableName)) tableMap.set(fullTableName, { rawName: tName, schemaKey, schema: effSchema, cols: [] });
     if (tComment) tableComments.set(fullTableName, tComment);
-    const isPk = pkSet.has(`${tName}.${cName}`);
+    const isPk = pkSet.has(`${schemaKey}.${cName}`);
     tableMap.get(fullTableName).cols.push({
       name: cName,
       type: cType,
@@ -696,8 +743,8 @@ function scanPostgres(cwd, cfg, host, port, now) {
       info.cols,
       tComment,
       now,
-      fkByTable.get(info.rawName) || [],
-      idxByTable.get(info.rawName) || []
+      fkByTable.get(info.schemaKey) || [],
+      idxByTable.get(info.schemaKey) || []
     );
     summaryRows.push({
       name: fullTableName,
@@ -734,10 +781,33 @@ function scanPostgres(cwd, cfg, host, port, now) {
       return { name, table, timing, desc: desc || "-" };
     });
 
+  const codeDictEntries = [];
+  if (cfg.codeTables && cfg.codeTables.length > 0) {
+    for (const ct of cfg.codeTables) {
+      const info = tableMap.get(ct);
+      if (!info || info.cols.length === 0) continue;
+      const safeSchema = info.schema.replace(/"/g, '""');
+      const safeTbl = info.rawName.replace(/"/g, '""');
+      const dataRes = runPsql(`SELECT * FROM "${safeSchema}"."${safeTbl}" LIMIT 1000;`);
+      if (dataRes.status === 0) {
+        const dataRows = (dataRes.stdout || "")
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => l.split("\t"));
+        codeDictEntries.push({ tableName: ct, columns: info.cols.map((c) => c.name), rows: dataRows });
+      }
+    }
+  }
+
   writeRoutinesMarkdown(cwd, "postgresql", cfg.database, views, procs, triggers, now);
-  writeDbSchemaSummary(cwd, "postgresql", cfg.database, summaryRows, views, procs, triggers, now, false);
+  if (codeDictEntries.length > 0) {
+    writeCodeDictionaryMarkdown(cwd, codeDictEntries, now);
+  }
+  writeDbSchemaSummary(cwd, "postgresql", cfg.database, summaryRows, views, procs, triggers, now, codeDictEntries.length > 0);
   console.log(
-    `[scandb] 已完成 PostgreSQL 唯讀掃描：${summaryRows.length} 張表、${views.length} 個 View、${procs.length} 個 SP/Function、${triggers.length} 個 Trigger。`
+    `[scandb] 已完成 PostgreSQL 唯讀掃描：${summaryRows.length} 張表、${views.length} 個 View、${procs.length} 個 SP/Function、${triggers.length} 個 Trigger${
+      codeDictEntries.length > 0 ? `、${codeDictEntries.length} 張共用代碼表字典` : ""
+    }。`
   );
 }
 
@@ -805,6 +875,11 @@ function scanMssql(cwd, cfg, host, port, now) {
     FROM sys.triggers tr JOIN sys.tables t ON tr.parent_id = t.object_id;
   `);
 
+  warnIfQueryFailed("SQL Server", "FOREIGN_KEYS", fkRes);
+  warnIfQueryFailed("SQL Server", "VIEWS", viewRes);
+  warnIfQueryFailed("SQL Server", "PROCEDURES", procRes);
+  warnIfQueryFailed("SQL Server", "TRIGGERS", trigRes);
+
   const fkByTable = new Map();
   for (const line of (fkRes.stdout || "").split("\n").filter(Boolean)) {
     const [tName, colName, refTable, refCol, fkName] = line.trim().split("\t");
@@ -865,17 +940,44 @@ function scanMssql(cwd, cfg, host, port, now) {
       return { name, table: table || "-", timing: timing || "-", desc: desc || "-" };
     });
 
+  const codeDictEntries = [];
+  if (cfg.codeTables && cfg.codeTables.length > 0) {
+    for (const ct of cfg.codeTables) {
+      const cols = tableMap.get(ct);
+      if (!cols || cols.length === 0) continue;
+      const safeCt = ct.replace(/\]/g, "]]");
+      const dataRes = runSqlcmd(`SELECT TOP 1000 * FROM [${safeCt}];`);
+      if (dataRes.status === 0) {
+        const dataRows = (dataRes.stdout || "")
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => l.trim().split("\t"));
+        codeDictEntries.push({ tableName: ct, columns: cols.map((c) => c.name), rows: dataRows });
+      }
+    }
+  }
+
   writeRoutinesMarkdown(cwd, "sqlserver", cfg.database, views, procs, triggers, now);
-  writeDbSchemaSummary(cwd, "sqlserver", cfg.database, summaryRows, views, procs, triggers, now, false);
+  if (codeDictEntries.length > 0) {
+    writeCodeDictionaryMarkdown(cwd, codeDictEntries, now);
+  }
+  writeDbSchemaSummary(cwd, "sqlserver", cfg.database, summaryRows, views, procs, triggers, now, codeDictEntries.length > 0);
   console.log(
-    `[scandb] 已完成 SQL Server 唯讀掃描：${summaryRows.length} 張表、${views.length} 個 View、${procs.length} 個 SP、${triggers.length} 個 Trigger。`
+    `[scandb] 已完成 SQL Server 唯讀掃描：${summaryRows.length} 張表、${views.length} 個 View、${procs.length} 個 SP、${triggers.length} 個 Trigger${
+      codeDictEntries.length > 0 ? `、${codeDictEntries.length} 張共用代碼表字典` : ""
+    }。`
   );
 }
 
 function scanOracle(cwd, cfg, host, port, now) {
-  const connectStr = `${cfg.username}/"${cfg.password}"@//${host}:${port || 1521}/${cfg.database}`;
+  if (/[\r\n]/.test(cfg.password || "")) {
+    fail("[scandb] Oracle 密碼不可包含換行字元。");
+    return;
+  }
+  const safeOraclePwd = String(cfg.password || "").replace(/"/g, '""');
+  const connectStr = `${cfg.username}/"${safeOraclePwd}"@//${host}:${port || 1521}/${cfg.database}`;
   const runSqlplus = (sql) => {
-    const input = `CONNECT ${connectStr}\nSET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF LINESIZE 2000 TRIMSPOOL ON\nSET TRANSACTION READ ONLY;\n${sql}\nEXIT;\n`;
+    const input = `WHENEVER SQLERROR EXIT SQL.SQLCODE\nCONNECT ${connectStr}\nSET PAGESIZE 0 FEEDBACK OFF VERIFY OFF HEADING OFF ECHO OFF LINESIZE 2000 TRIMSPOOL ON\nSET TRANSACTION READ ONLY;\n${sql}\nEXIT;\n`;
     return spawnSync("sqlplus", ["-S", "/NOLOG"], { input, encoding: "utf8" });
   };
 
@@ -887,7 +989,8 @@ function scanOracle(cwd, cfg, host, port, now) {
     ORDER BY c.TABLE_NAME, c.COLUMN_ID;
   `);
 
-  if (colRes.status !== 0 || (colRes.stdout || "").includes("ORA-")) {
+  const colOut = `${colRes.stdout || ""}\n${colRes.stderr || ""}`;
+  if (colRes.status !== 0 || /\b(?:ORA|SP2)-\d+/i.test(colOut)) {
     fail(`[scandb] Oracle (sqlplus) 唯讀連線失敗: ${(colRes.stderr || colRes.stdout || "").trim()}`);
     return;
   }
@@ -899,6 +1002,10 @@ function scanOracle(cwd, cfg, host, port, now) {
   const trigRes = runSqlplus(
     `SELECT TRIGGER_NAME || CHR(9) || TABLE_NAME || CHR(9) || TRIGGER_TYPE || CHR(9) || TRIGGERING_EVENT FROM USER_TRIGGERS ORDER BY TRIGGER_NAME;`
   );
+
+  warnIfQueryFailed("Oracle", "USER_VIEWS", viewRes);
+  warnIfQueryFailed("Oracle", "USER_OBJECTS", procRes);
+  warnIfQueryFailed("Oracle", "USER_TRIGGERS", trigRes);
 
   const tableMap = new Map();
   for (const line of (colRes.stdout || "").split("\n").filter(Boolean)) {
@@ -944,10 +1051,33 @@ function scanOracle(cwd, cfg, host, port, now) {
       return { name, table: table || "-", timing: timing || "-", desc: desc || "-" };
     });
 
+  const codeDictEntries = [];
+  if (cfg.codeTables && cfg.codeTables.length > 0) {
+    for (const ct of cfg.codeTables) {
+      const cols = tableMap.get(ct) || tableMap.get(ct.toUpperCase());
+      if (!cols || cols.length === 0) continue;
+      const safeCt = ct.replace(/"/g, '""');
+      const colExpr = cols.map((c) => `NVL(TO_CHAR("${c.name.replace(/"/g, '""')}"), '')`).join(" || CHR(9) || ");
+      const dataRes = runSqlplus(`SELECT ${colExpr} FROM "${safeCt}" WHERE ROWNUM <= 1000;`);
+      if (dataRes.status === 0 && !/\b(?:ORA|SP2)-\d+/i.test(dataRes.stdout || "")) {
+        const dataRows = (dataRes.stdout || "")
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => l.trim().split("\t"));
+        codeDictEntries.push({ tableName: ct, columns: cols.map((c) => c.name), rows: dataRows });
+      }
+    }
+  }
+
   writeRoutinesMarkdown(cwd, "oracle", cfg.database, views, procs, triggers, now);
-  writeDbSchemaSummary(cwd, "oracle", cfg.database, summaryRows, views, procs, triggers, now, false);
+  if (codeDictEntries.length > 0) {
+    writeCodeDictionaryMarkdown(cwd, codeDictEntries, now);
+  }
+  writeDbSchemaSummary(cwd, "oracle", cfg.database, summaryRows, views, procs, triggers, now, codeDictEntries.length > 0);
   console.log(
-    `[scandb] 已完成 Oracle 唯讀掃描：${summaryRows.length} 張表、${views.length} 個 View、${procs.length} 個 SP/Package、${triggers.length} 個 Trigger。`
+    `[scandb] 已完成 Oracle 唯讀掃描：${summaryRows.length} 張表、${views.length} 個 View、${procs.length} 個 SP/Package、${triggers.length} 個 Trigger${
+      codeDictEntries.length > 0 ? `、${codeDictEntries.length} 張共用代碼表字典` : ""
+    }。`
   );
 }
 
@@ -1024,11 +1154,15 @@ function writeDbSchemaSummary(cwd, product, dbName, tables, views, procedures, t
       ? triggers.map((tr) => `| \`${tr.name}\` | \`${tr.table}\` | ${tr.timing} | ${tr.desc || "-"} |`).join("\n")
       : "| 無 | - | - | - |";
 
+  const codeDictLine = hasCodeDict
+    ? `\n- **共用代碼表字典**：[code-dictionary.md](./code-dictionary.md)`
+    : "";
+
   const content = `# 資料庫結構總覽索引 (Database Schema Inventory)
 
 - **最近掃描時間 (\`scandb\`)**：\`${now}\`
 - **資料庫產品 (DB Product)**：\`${product}\`
-- **資料庫名稱 / Schema**：\`${dbName}\`
+- **資料庫名稱 / Schema**：\`${dbName}\`${codeDictLine}
 
 ---
 

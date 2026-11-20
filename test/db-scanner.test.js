@@ -224,9 +224,9 @@ if (!(process.env.PGOPTIONS || "").includes("default_transaction_read_only=on"))
 if (sql.includes("information_schema.columns")) {
   console.log("public\\tpg_users\\tid\\tinteger\\tNO\\t\\tID\\t用戶表");
 } else if (sql.includes("table_constraints")) {
-  console.log("pg_users\\tid\\tPRIMARY KEY\\t\\t");
+  console.log("public\\tpg_users\\tid\\tPRIMARY KEY\\t\\t");
 } else if (sql.includes("pg_indexes")) {
-  console.log("pg_users\\tpk_pg_users\\tCREATE UNIQUE INDEX pk_pg_users ON public.pg_users (id)");
+  console.log("public\\tpg_users\\tpk_pg_users\\tCREATE UNIQUE INDEX pk_pg_users ON public.pg_users (id)");
 } else if (sql.includes("information_schema.views")) {
   console.log("v_pg_users\\tSELECT id FROM pg_users");
 } else if (sql.includes("pg_proc")) {

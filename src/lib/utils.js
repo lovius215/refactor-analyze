@@ -439,6 +439,21 @@ function getOption(args, flag) {
   return index >= 0 ? args[index + 1] || null : null;
 }
 
+function getPositionalArgs(args, valueFlags = []) {
+  const flagSet = new Set(valueFlags);
+  const positionals = [];
+  for (let i = 0; i < args.length; i++) {
+    const token = args[i];
+    if (flagSet.has(token)) {
+      i++; // skip flag value
+      continue;
+    }
+    if (token.startsWith("-")) continue;
+    positionals.push(token);
+  }
+  return positionals;
+}
+
 function printResultList(label, results) {
   console.log(`refactor-analyze ${label}`);
   for (const result of results) {
@@ -472,20 +487,30 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
     const dataFlowContent = fs.readFileSync(dataFlowPath, "utf8");
     const lines = dataFlowContent.split("\n");
     const tableOps = new Map();
+    let inDbTableSection = false;
+    let hasSectionHeadings = false;
 
     for (const line of lines) {
+      if (/^##\s+/.test(line)) {
+        hasSectionHeadings = true;
+        inDbTableSection = /資料庫資料表|DB Tables|資料表與欄位讀寫/i.test(line);
+        continue;
+      }
+      if (hasSectionHeadings && !inDbTableSection) continue;
       if (!line.startsWith("|") || line.includes("資料表名稱") || line.includes("---")) continue;
       const parts = line
         .split("|")
         .map((p) => p.trim())
-        .filter(Boolean);
+        .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
       if (parts.length >= 2) {
         const tName = parts[0].replace(/`/g, "").trim();
-        const op = parts[1].toUpperCase();
-        if (!tName || tName === "待分析" || tName === "-") continue;
+        const opRaw = parts[1].replace(/`/g, "").trim().toUpperCase();
+        if (!tName || tName === "待分析" || tName === "-" || tName.startsWith("*(")) continue;
+        // Only accept valid CRUD operation cells like "C/R", "R, U", "CRUD", not arbitrary type words like "String"
+        if (!/^[CRUD/\s,]+$/.test(opRaw)) continue;
         if (!tableOps.has(tName)) tableOps.set(tName, new Set());
         for (const char of ["C", "R", "U", "D"]) {
-          if (op.includes(char)) tableOps.get(tName).add(char);
+          if (opRaw.includes(char)) tableOps.get(tName).add(char);
         }
       }
     }
@@ -578,12 +603,36 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
       }
 
       if (foundRows.length > 0) {
+        // Extract Git branch & commit hash from item dead-code.md metadata
+        let itemBranch = "-";
+        let itemCommit = "-";
+        const combinedGit = itemDeadCode.match(/目標系統 Git 分支\s*\/\s*Commit Hash\*\*：[ \t]*`([^`]+)`\s*@\s*`([^`]+)`/);
+        if (combinedGit) {
+          itemBranch = combinedGit[1].trim();
+          itemCommit = combinedGit[2].trim();
+        } else {
+          const bMatch = itemDeadCode.match(/目標系統 Git 分支[^`]*`([^`]+)`/);
+          const cMatch = itemDeadCode.match(/目標系統 Git (?:Commit Hash|版本)[^`]*`([^`]+)`/);
+          if (bMatch) itemBranch = bMatch[1].trim();
+          if (cMatch) itemCommit = cMatch[1].trim();
+        }
+
         let sysDeadCode = fs.readFileSync(sysDeadCodePath, "utf8");
+        const sepMarker = "|---|---|---|---|---|---|";
+        const sepIdx = sysDeadCode.indexOf(sepMarker);
         for (const r of foundRows) {
-          const filePath = r[0] || "";
-          if (filePath && !sysDeadCode.includes(filePath)) {
-            const tableRow = `| \`${normId}\` | - | - | \`${r[0]}\` | ${r[1]} | ${r[2] || "-"} |\n`;
+          const filePath = r[0].replace(/`/g, "").trim();
+          if (!filePath) continue;
+          const alreadyExists = sysDeadCode
+            .split("\n")
+            .some((l) => l.startsWith("|") && l.includes(`\`${normId}\``) && l.includes(`\`${filePath}\``));
+          if (alreadyExists) continue;
+          const tableRow = `| \`${normId}\` | \`${itemBranch}\` | \`${itemCommit}\` | \`${filePath}\` | ${r[1]} | ${r[2] || "-"} |\n`;
+          if (sysDeadCode.includes("| `system` |")) {
             sysDeadCode = sysDeadCode.replace("| `system` |", tableRow + "| `system` |");
+          } else if (sepIdx !== -1) {
+            const insertPos = sysDeadCode.indexOf(sepMarker) + sepMarker.length;
+            sysDeadCode = sysDeadCode.slice(0, insertPos) + "\n" + tableRow.trimEnd() + sysDeadCode.slice(insertPos);
           }
         }
         fs.writeFileSync(sysDeadCodePath, sysDeadCode, "utf8");
@@ -674,7 +723,11 @@ function aggregateDomainDictionary(cwd, itemId) {
 
   for (const v of vouchersToPromote) {
     const voucherTag = `\`${v.id}\``;
-    if (dictContent.includes(voucherTag) && dictContent.includes(`\`${normId}\``)) {
+    const itemTag = `| \`${normId}\` |`;
+    const alreadyExists = dictContent
+      .split("\n")
+      .some((l) => l.startsWith("|") && l.includes(voucherTag) && l.includes(itemTag));
+    if (alreadyExists) {
       continue;
     }
 
@@ -721,6 +774,7 @@ module.exports = {
   listFilesRecursive,
   applyReplacements,
   getOption,
+  getPositionalArgs,
   printResultList,
   fail
 };

@@ -5,6 +5,7 @@ const {
   normalizeItemId,
   getTargetSystemPathFromOverview,
   getOption,
+  getPositionalArgs,
   fail
 } = require("./utils");
 
@@ -12,15 +13,28 @@ const CITATION_REGEX = /`([^`\n]+?\.[a-zA-Z0-9]{1,10})#L(\d+)(?:-(?:L)?(\d+))?`/
 const VOUCHER_REGEX = /`\[(Human|Doc|DB|Decision)[^`\]\n]*\]#(BL-\d+)`/g;
 const DB_REF_REGEX = /(?:project\/system\/)?db\/([a-zA-Z0-9_.-]+\.md)/g;
 
+function stripNonProseBlocks(text) {
+  const lines = (text || "").split("\n");
+  const kept = [];
+  let inFence = false;
+  for (const line of lines) {
+    if (line.trim().startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    if (line.trim().startsWith(">")) continue;
+    kept.push(line);
+  }
+  return kept.join("\n");
+}
+
 function extractCitationsFromText(text, docName) {
   const citations = [];
-  const nonBlockquoteText = text
-    .split("\n")
-    .filter((line) => !line.trim().startsWith(">"))
-    .join("\n");
+  const proseText = stripNonProseBlocks(text);
   let match;
   CITATION_REGEX.lastIndex = 0;
-  while ((match = CITATION_REGEX.exec(nonBlockquoteText)) !== null) {
+  while ((match = CITATION_REGEX.exec(proseText)) !== null) {
     const filePath = match[1].trim();
     if (
       filePath.includes("{{") ||
@@ -47,13 +61,10 @@ function extractCitationsFromText(text, docName) {
 
 function extractVouchersFromText(text, docName) {
   const vouchers = [];
-  const nonBlockquoteText = text
-    .split("\n")
-    .filter((line) => !line.trim().startsWith(">"))
-    .join("\n");
+  const proseText = stripNonProseBlocks(text);
   let match;
   VOUCHER_REGEX.lastIndex = 0;
-  while ((match = VOUCHER_REGEX.exec(nonBlockquoteText)) !== null) {
+  while ((match = VOUCHER_REGEX.exec(proseText)) !== null) {
     vouchers.push({
       docName,
       raw: match[0],
@@ -99,7 +110,12 @@ function parseBacklogVouchers(backlogContent) {
 }
 
 function getFileLineCount(targetDir, relFilePath, recordedCommitHash) {
-  const absPath = path.resolve(targetDir, relFilePath);
+  const resolvedTarget = path.resolve(targetDir);
+  const absPath = path.resolve(resolvedTarget, relFilePath);
+  const relCheck = path.relative(resolvedTarget, absPath);
+  if (relCheck.startsWith("..") || path.isAbsolute(relCheck)) {
+    return { exists: false, source: null, lines: 0 };
+  }
   if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
     const content = fs.readFileSync(absPath, "utf8");
     return { exists: true, source: "worktree", lines: content.split("\n").length };
@@ -196,9 +212,10 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
       );
     }
 
+    const proseForDb = stripNonProseBlocks(content);
     let dbMatch;
     DB_REF_REGEX.lastIndex = 0;
-    while ((dbMatch = DB_REF_REGEX.exec(content)) !== null) {
+    while ((dbMatch = DB_REF_REGEX.exec(proseForDb)) !== null) {
       const refFile = dbMatch[1];
       if (!refFile.includes("<table>")) {
         dbRefs.add(refFile);
@@ -324,7 +341,7 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
 
 function verifyCommand(cwd, args = []) {
   const targetOverride = getOption(args, "--target");
-  const rawId = args.find((a) => !a.startsWith("-") && a !== targetOverride);
+  const rawId = getPositionalArgs(args, ["--target"])[0] || null;
 
   const projectDir = path.join(cwd, "project");
   if (!fs.existsSync(projectDir)) {

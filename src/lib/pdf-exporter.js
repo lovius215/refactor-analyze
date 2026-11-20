@@ -1,11 +1,13 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { pathToFileURL } = require("url");
 const { spawnSync } = require("child_process");
 const {
   normalizeItemId,
   listFilesRecursive,
   getOption,
+  getPositionalArgs,
   printResultList,
   fail
 } = require("./utils");
@@ -13,7 +15,7 @@ const {
 function exportMarkdownToPdf(cwd, args = []) {
   const outputOpt = getOption(args, "--output") || getOption(args, "-o");
   const mergeMode = args.includes("--merge") || args.includes("-m");
-  const targetArg = args.find((a) => !a.startsWith("-") && a !== outputOpt);
+  const targetArg = getPositionalArgs(args, ["--output", "-o"])[0] || null;
 
   let mdFiles = [];
   let defaultMergedPdfPath = null;
@@ -169,7 +171,7 @@ function renderHtmlToPdf(htmlContent, outputPdfPath, browserBin) {
   try {
     if (browserBin) {
       fs.mkdirSync(tmpProfileDir, { recursive: true });
-      const fileUrl = `file://${tmpHtmlPath.replace(/\\/g, "/")}`;
+      const fileUrl = pathToFileURL(tmpHtmlPath).href;
       const args = [
         "--headless",
         "--disable-gpu",
@@ -241,11 +243,17 @@ function escapeHtml(str) {
 
 function formatInlineMarkdown(text) {
   let out = escapeHtml(text);
-  out = out.replace(/`([^`]+)`/g, "<code>$1</code>");
+  const codeSpans = [];
+  out = out.replace(/`([^`]+)`/g, (_, code) => {
+    const token = `\x00CODE${codeSpans.length}\x00`;
+    codeSpans.push(`<code>${code}</code>`);
+    return token;
+  });
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/\*([^*]+)\*/g, "<em>$1</em>");
   out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
   out = out.replace(/\$\\to\$/g, "&rarr;");
+  out = out.replace(/\x00CODE(\d+)\x00/g, (_, idx) => codeSpans[Number(idx)]);
   return out;
 }
 
@@ -319,8 +327,9 @@ function markdownToHtmlBody(md) {
       const rawCells = line
         .trim()
         .slice(1, -1)
+        .replace(/\\\|/g, "\x00PIPE\x00")
         .split("|")
-        .map((c) => c.trim());
+        .map((c) => c.replace(/\x00PIPE\x00/g, "|").trim());
       if (rawCells.every((c) => /^[-:]+$/.test(c))) {
         continue;
       }

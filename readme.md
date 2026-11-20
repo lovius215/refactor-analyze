@@ -56,7 +56,7 @@ refactor-analyze init --full
    - 第二階段 `analyze <編號>` 每次只針對單一編號順著進入點往下追，支援隨時中斷與跨 AI 接力。
 3. **🗄️ 真實資料庫掃描（`scandb` + 支援 SSH 跳板機 + 按表拆檔）**：
    - 在 `project/system/db-connection.md` 填入資料庫產品、路徑、帳號、密碼與跳板機（SSH Bastion）設定後（受 `.gitignore` 與 macOS/Linux `0600` 權限保護；Windows 共享主機請另行設定 NTFS 權限），執行 `scandb` 即可唯讀抓取所有 Table、欄位、PK/FK、註解與 Trigger，並按表拆分為 `project/system/db/<table>.md`。
-   - **無明文落盤與無 `ps` 暴露**：密碼支援 `` `env:DB_PASSWORD` `` / `` `${DB_PASSWORD}` `` 或 `RA_DB_PASSWORD` 環境變數；MySQL (`MYSQL_PWD`)、PostgreSQL (`PGPASSWORD`)、SQL Server (`SQLCMDPASSWORD`) 与 Oracle (`sqlplus /NOLOG` + stdin `CONNECT`) 皆不透過命令列參數傳遞密碼。
+   - **無明文落盤與無 `ps` 暴露**：密碼支援 `` `env:DB_PASSWORD` `` / `` `${DB_PASSWORD}` `` 或 `RA_DB_PASSWORD` 環境變數；MySQL (`MYSQL_PWD`)、PostgreSQL (`PGPASSWORD`)、SQL Server (`SQLCMDPASSWORD`) 與 Oracle (`sqlplus /NOLOG` + stdin `CONNECT`) 皆不透過命令列參數傳遞密碼。
    - **SSH 跳板機安全預設**：`StrictHostKeyChecking` 預設為 `yes`（需先透過 `ssh-keyscan` 寫入 `~/.ssh/known_hosts`，若需放寬可於設定檔明確設為 `accept-new`）；跳板機強烈建議使用 SSH 私鑰（`-i`），優於密碼（`sshpass -e`）。
 4. **♻️ 共用邏輯抽離去重（`project/shared/`）**：
    - 多支 API 或批次共用的底層核心元件抽離至 `project/shared/<module>.md`，後續編號分析時直接引用，不重複燒 Token。
