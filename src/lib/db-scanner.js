@@ -92,6 +92,15 @@ function escapeSqlLiteral(val) {
   return String(val || "").replace(/'/g, "''");
 }
 
+function getDefaultDbPort(product) {
+  const p = String(product || "").toLowerCase();
+  if (p === "mysql" || p === "mariadb") return "3306";
+  if (p === "postgres" || p === "postgresql" || p === "pgsql") return "5432";
+  if (p === "mssql" || p === "sqlserver" || p === "sql-server") return "1433";
+  if (p === "oracle") return "1521";
+  return "";
+}
+
 function warnIfQueryFailed(dbLabel, queryName, res) {
   if (res && res.status !== 0) {
     console.warn(
@@ -137,13 +146,17 @@ function scanDatabase(cwd) {
   }
 
   let connectHost = cfg.host;
-  let connectPort = cfg.port;
+  let connectPort = cfg.port || getDefaultDbPort(cfg.product);
   let controlSocketPath = null;
 
   if (cfg.sshEnabled && cfg.sshHost && cfg.sshUser) {
+    if (!connectPort) {
+      fail("SSH 跳板機設定不完整：無法推斷目標資料庫連接埠，請在 db-connection.md 填寫「連接埠 (Port)」。");
+      return;
+    }
     controlSocketPath = path.join(os.tmpdir(), `ra-ssh-${process.pid}-${Date.now()}.sock`);
     console.log(
-      `[SSH 跳板機] 正在透過 ${cfg.sshUser}@${cfg.sshHost}:${cfg.sshPort} 建立專屬安全通道 (Local Port: ${cfg.localTunnelPort} -> ${cfg.host}:${cfg.port})...`
+      `[SSH 跳板機] 正在透過 ${cfg.sshUser}@${cfg.sshHost}:${cfg.sshPort} 建立專屬安全通道 (Local Port: ${cfg.localTunnelPort} -> ${cfg.host}:${connectPort})...`
     );
     const sshArgs = [
       "-M",
@@ -152,7 +165,7 @@ function scanDatabase(cwd) {
       "-f",
       "-N",
       "-L",
-      `127.0.0.1:${cfg.localTunnelPort}:${cfg.host}:${cfg.port}`,
+      `127.0.0.1:${cfg.localTunnelPort}:${cfg.host}:${connectPort}`,
       "-p",
       String(cfg.sshPort),
       "-o",
@@ -165,7 +178,7 @@ function scanDatabase(cwd) {
 
     if (cfg.sshKeyPath) {
       const resolvedKey = cfg.sshKeyPath.startsWith("~")
-        ? path.join(os.homedir(), cfg.sshKeyPath.slice(1))
+        ? path.join(os.homedir(), cfg.sshKeyPath.replace(/^~[\\/]?/, ""))
         : path.resolve(cwd, cfg.sshKeyPath);
       if (fs.existsSync(resolvedKey)) {
         sshArgs.push("-i", resolvedKey);
@@ -177,8 +190,8 @@ function scanDatabase(cwd) {
 
     let sshRes;
     if (cfg.sshPassword) {
-      const whichSshpass = spawnSync("which", ["sshpass"], { encoding: "utf8" });
-      if (whichSshpass.status === 0) {
+      const checkSshpass = spawnSync("sshpass", ["-V"], { encoding: "utf8" });
+      if (!checkSshpass.error && checkSshpass.status === 0) {
         const env = Object.assign({}, process.env, { SSHPASS: cfg.sshPassword });
         sshRes = spawnSync("sshpass", ["-e", "ssh", ...sshArgs], { cwd, env, encoding: "utf8" });
       } else {
@@ -784,7 +797,7 @@ function scanPostgres(cwd, cfg, host, port, now) {
   const codeDictEntries = [];
   if (cfg.codeTables && cfg.codeTables.length > 0) {
     for (const ct of cfg.codeTables) {
-      const info = tableMap.get(ct);
+      const info = tableMap.get(ct) || tableMap.get(ct.replace(/^public\./i, ""));
       if (!info || info.cols.length === 0) continue;
       const safeSchema = info.schema.replace(/"/g, '""');
       const safeTbl = info.rawName.replace(/"/g, '""');

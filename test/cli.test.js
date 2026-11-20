@@ -50,6 +50,8 @@ test("1. init, analyze, 0-Token verify (anti-hallucination & drift detection), a
     // 2. Run refactor-analyze init --full --lang en --target <targetDir>
     const initRes = runCli(workDir, ["init", "--full", "--lang", "en", "--target", targetDir]);
     assert.equal(initRes.status, 0, `init failed: ${initRes.stderr}`);
+    spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: workDir });
+    spawnSync("git", ["config", "user.name", "Tester"], { cwd: workDir });
     assert.ok(fs.existsSync(path.join(workDir, ".gitignore")));
     assert.ok(fs.existsSync(path.join(workDir, "AGENTS.md")));
     assert.ok(fs.existsSync(path.join(workDir, "rules", "zero-hallucination-rule.md")));
@@ -82,7 +84,10 @@ test("1. init, analyze, 0-Token verify (anti-hallucination & drift detection), a
     const itemDir = path.join(workDir, "project", "001");
     for (const f of ["analysis.md", "ui-behavior.md", "data-flow.md", "sql.md", "dependencies.md", "dead-code.md", "backlog.md"]) {
       const p = path.join(itemDir, f);
-      const cleaned = fs.readFileSync(p, "utf8").replace(/\*\(待 AI 分析填寫\)\*/g, "已填寫分析內容").replace(/待確認/g, "已釐清");
+      const cleaned = fs
+        .readFileSync(p, "utf8")
+        .replace(/\*\(待 AI (?:分析)?填寫[^)]*\)\*/g, "已填寫分析內容")
+        .replace(/待確認/g, "已釐清");
       fs.writeFileSync(p, cleaned, "utf8");
     }
     fs.writeFileSync(
@@ -252,6 +257,8 @@ test("4. voucher verification detects missing/unconfirmed vouchers, passes confi
   const workDir = makeTempDir("ra-voucher-");
   try {
     runCli(workDir, ["init"]);
+    spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: workDir });
+    spawnSync("git", ["config", "user.name", "Tester"], { cwd: workDir });
     assert.ok(
       fs.existsSync(path.join(workDir, "project", "system", "domain-dictionary.md")),
       "domain-dictionary.md should be initialized"

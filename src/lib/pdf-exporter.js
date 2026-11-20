@@ -116,6 +116,7 @@ function exportMarkdownToPdf(cwd, args = []) {
         results.push({ action: "create", target: path.relative(cwd, outPdf) });
       } else {
         results.push({ action: "warn", target: path.relative(cwd, outPdf), message: "PDF 轉換失敗" });
+        process.exitCode = 1;
       }
     }
   }
@@ -251,7 +252,13 @@ function formatInlineMarkdown(text) {
   });
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/\*([^*]+)\*/g, "<em>$1</em>");
-  out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => {
+    const cleanHref = href.trim();
+    if (/^(?:javascript|data|vbscript):/i.test(cleanHref)) {
+      return label;
+    }
+    return `<a href="${cleanHref}">${label}</a>`;
+  });
   out = out.replace(/\$\\to\$/g, "&rarr;");
   out = out.replace(/\x00CODE(\d+)\x00/g, (_, idx) => codeSpans[Number(idx)]);
   return out;
@@ -393,6 +400,11 @@ function markdownToHtmlBody(md) {
     html.push(`<p>${formatInlineMarkdown(line)}</p>`);
   }
 
+  if (inCodeBlock) {
+    html.push(
+      `<pre><code class="lang-${escapeHtml(codeLang)}">${escapeHtml(codeLines.join("\n"))}</code></pre>`
+    );
+  }
   flushTable();
   flushList();
   flushBlockquote();

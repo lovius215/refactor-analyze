@@ -261,3 +261,106 @@ test("regression: parseDbConnectionConfig does not leak SSH fields into DB port/
     fs.rmSync(workDir, { recursive: true, force: true });
   }
 });
+
+test("regression: domain-dictionary Section 2 insertion does not shift index or corrupt Section 1", () => {
+  const workDir = makeTempDir("ra-dictsec2-");
+  try {
+    runCli(workDir, ["init"]);
+    runCli(workDir, ["analyze", "001"]);
+
+    const hdr = "| 憑證 ID | 類型 | 位置 | 問題 | 結論 | 來源 | 佐證 | 拍板人 | 範圍 | 狀態 |";
+    fs.writeFileSync(
+      path.join(workDir, "project", "001", "backlog.md"),
+      `${hdr}\n|---|---|---|---|---|---|---|---|---|---|\n` +
+        `| \`BL-01\` | 商業規則/公式 | PriceCalc.java | VIP折扣公式 | 滿千折百 | Official-Doc | 產品手冊 | PM王 | 全系統通用 | 已釐清 |\n`,
+      "utf8"
+    );
+
+    aggregateDomainDictionary(workDir, "001");
+    const dict = fs.readFileSync(path.join(workDir, "project", "system", "domain-dictionary.md"), "utf8");
+    // Section 1 placeholder must remain intact!
+    const sec1 = dict.slice(dict.indexOf("## 1."), dict.indexOf("## 2."));
+    const sec2 = dict.slice(dict.indexOf("## 2."));
+    assert.match(sec1, /\*\(待由各編號 commit 自動匯總\)\*/);
+    assert.doesNotMatch(sec1, /BL-01/);
+    assert.match(sec2, /\| `VIP折扣公式` \(`BL-01`\) \| 滿千折百 \| Official-Doc \| 產品手冊 \| PM王 \| `001` \|/);
+    assert.doesNotMatch(sec2, /\*\(待由各編號 commit 自動匯總\)\*/);
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test("regression: verifier catches colon/semicolon variants of *(待 AI 填寫...)* placeholders", () => {
+  const workDir = makeTempDir("ra-verph-");
+  try {
+    runCli(workDir, ["init"]);
+    runCli(workDir, ["analyze", "001"]);
+    const itemDir = path.join(workDir, "project", "001");
+    for (const f of ["analysis.md", "ui-behavior.md", "data-flow.md", "sql.md", "dependencies.md", "dead-code.md"]) {
+      fs.writeFileSync(path.join(itemDir, f), `# ${f}\nOK\n`, "utf8");
+    }
+    fs.writeFileSync(
+      path.join(itemDir, "business-logic.md"),
+      "# 業務邏輯\n- 規則：`[Human: PM]#BL-01`\n- 交易範圍：*(待 AI 分析填寫：如有 @Transactional)*\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(itemDir, "backlog.md"),
+      `| 憑證 ID | 類型 | 位置 | 問題 | 結論 | 來源 | 佐證 | 拍板人 | 範圍 | 狀態 |\n|---|---|---|---|---|---|---|---|---|---|\n| \`BL-01\` | 規則 | A | Q | 確認 | Human | M | PM | 單一編號 | 已釐清 |\n`,
+      "utf8"
+    );
+    const res = verifySingleItem(workDir, "001");
+    assert.equal(res.valid, false);
+    assert.ok(res.errors.some((e) => e.includes("模板佔位符")));
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test("regression: SSH tunnel fills default DB port 3306 when Port is omitted in db-connection.md", () => {
+  const workDir = makeTempDir("ra-sshport-");
+  const mockBin = makeTempDir("ra-sshportbin-");
+  try {
+    runCli(workDir, ["init"]);
+    fs.writeFileSync(
+      path.join(workDir, "project", "system", "db-connection.md"),
+      `- **啟用資料庫掃描 (Enabled)**: \`true\`
+- **資料庫產品 (Database Product)**: \`mysql\`
+- **連線主機或檔案路徑 (Host / Path)**: \`db.internal\`
+- **資料庫名稱 (Database / Schema)**: \`shop\`
+- **帳號 (Username)**: \`ro\`
+- **密碼 (Password)**: \`pw\`
+- **啟用跳板機 (SSH Enabled)**: \`true\`
+- **跳板機主機 (SSH Host)**: \`jump.internal\`
+- **跳板機帳號 (SSH Username)**: \`ops\`
+`,
+      "utf8"
+    );
+    const sshLog = path.join(workDir, "ssh.json");
+    fs.writeFileSync(
+      path.join(mockBin, "ssh"),
+      `#!/usr/bin/env node\nconst fs = require("fs");\nconst a = process.argv.slice(2);\nif (a.includes("-O")) process.exit(0);\nfs.writeFileSync(${JSON.stringify(sshLog)}, JSON.stringify(a));\nprocess.exit(0);\n`,
+      { mode: 0o755 }
+    );
+    fs.writeFileSync(
+      path.join(mockBin, "mysql"),
+      `#!/usr/bin/env node\nconsole.log("");\n`,
+      { mode: 0o755 }
+    );
+
+    const res = runCli(workDir, ["scandb"], { PATH: `${mockBin}${path.delimiter}${process.env.PATH}` });
+    assert.equal(res.status, 0, `scandb failed: ${res.stderr}`);
+    const sshArgs = JSON.parse(fs.readFileSync(sshLog, "utf8"));
+    assert.ok(sshArgs.includes("127.0.0.1:13306:db.internal:3306"), `Expected default port 3306 in -L, got: ${sshArgs.join(" ")}`);
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+    fs.rmSync(mockBin, { recursive: true, force: true });
+  }
+});
+
+test("regression: pdf-exporter flushes unclosed code block and sanitizes javascript: links", () => {
+  const html = markdownToHtmlBody("Link: [bad](javascript:alert(1)) and [ok](https://example.com)\n\n```sql\nSELECT 1;");
+  assert.doesNotMatch(html, /javascript:/);
+  assert.match(html, /<a href="https:\/\/example\.com">ok<\/a>/);
+  assert.match(html, /<pre><code class="lang-sql">SELECT 1;<\/code><\/pre>/);
+});

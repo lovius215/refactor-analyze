@@ -468,11 +468,12 @@ function commitItem(args = []) {
   if (commitRes.status === 0) {
     console.log(`[Git] 已建立本機 commit: ${commitMsg}`);
   } else {
-    const out = (commitRes.stdout || commitRes.stderr || "").trim();
-    if (out.includes("nothing to commit")) {
+    const out = `${commitRes.stdout || ""}\n${commitRes.stderr || ""}`.trim();
+    if (out.includes("nothing to commit") || out.includes("nothing added to commit")) {
       console.log(`[Git] 本機目前無新增變更需 commit。`);
     } else {
-      console.log(`[Git] Commit 訊息: ${out}`);
+      fail(`[Git 錯誤] 建立本機 commit 失敗: ${out}`);
+      return;
     }
   }
 
@@ -514,13 +515,18 @@ function syncWithRemoteSafely(remote, branch) {
       process.exitCode = 1;
       return;
     }
+
+    if (!pullOutput.includes("couldn't find remote ref")) {
+      fail(`[Git Sync 錯誤] 拉取遠端 ${remote}/${branch} 失敗，已中止推送: ${pullOutput.trim()}`);
+      return;
+    }
   }
 
   const pushRes = spawnSync("git", ["push", "-u", remote, branch], { cwd, encoding: "utf8" });
   if (pushRes.status === 0) {
     console.log(`[Git Sync] 已成功將變更同步推送至 ${remote}/${branch}！`);
   } else {
-    console.warn(`[Git 警告] 推送至 ${remote}/${branch} 失敗: ${(pushRes.stderr || pushRes.stdout || "").trim()}`);
+    fail(`[Git Sync 錯誤] 推送至 ${remote}/${branch} 失敗: ${(pushRes.stderr || pushRes.stdout || "").trim()}`);
   }
 }
 

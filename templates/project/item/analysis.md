@@ -20,7 +20,7 @@
 - **進入點類型**：`API / Page / Batch / Event`
 - **進入點檔案與方法（含行號）**：`{{ITEM_LOCATION}}`
 - **Request / Input Args（輸入參數）**：
-  | 參數名稱 | 來源 (`Body`/`Query`/`Path`/`Header`/`Batch Args`) | 資料型態 | 必填 | 說明与驗證規則（附檔案行號來源） |
+  | 參數名稱 | 來源 (`Body`/`Query`/`Path`/`Header`/`Batch Args`) | 資料型態 | 必填 | 說明與驗證規則（附檔案行號來源） |
   |---|---|---|---|---|
   | 待分析 | - | - | - | - |
 - **Response / Output（輸出結果與狀態碼）**：

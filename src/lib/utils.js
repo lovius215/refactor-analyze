@@ -177,7 +177,7 @@ function detectSystemType(targetDir) {
 }
 
 function calculateFileComplexity(filePath) {
-  if (!filePath || !fs.existsSync(filePath)) {
+  if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
     return { level: "待評估", metrics: "尚未讀取原始碼檔案" };
   }
   try {
@@ -740,11 +740,10 @@ function aggregateDomainDictionary(cwd, itemId) {
     if (sepIdx === -1) return;
 
     const afterSep = sepIdx + tableHeaderStr.length;
-    const placeholderStr = "| *(待由各編號 commit 自動匯總)* | - | - | - | - | - |\n";
-    if (dictContent.includes(placeholderStr)) {
-      dictContent = dictContent.replace(placeholderStr, "");
-    }
-    dictContent = dictContent.slice(0, afterSep) + "\n" + rowStr + dictContent.slice(afterSep);
+    const before = dictContent.slice(0, afterSep);
+    let after = dictContent.slice(afterSep);
+    after = after.replace(/^\r?\n\| \*\(待由各編號 commit 自動匯總\)\* \| - \| - \| - \| - \| - \|/, "");
+    dictContent = before + "\n" + rowStr + after;
   }
 
   for (const v of vouchersToPromote) {

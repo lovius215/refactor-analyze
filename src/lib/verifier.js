@@ -196,8 +196,8 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
     }
 
     const content = fs.readFileSync(docPath, "utf8");
-    if (content.includes("*(待 AI 分析填寫)*") || content.includes("{{ITEM_")) {
-      errors.push(`[${docName}] 仍包含尚未填寫的模板佔位符 *(待 AI 分析填寫)*`);
+    if (/\*\(待 AI (?:分析)?填寫/i.test(content) || content.includes("{{ITEM_")) {
+      errors.push(`[${docName}] 仍包含尚未填寫的模板佔位符 *(待 AI 分析填寫...)*`);
     }
 
     const docCitations = extractCitationsFromText(content, docName);
