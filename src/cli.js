@@ -35,6 +35,7 @@ const {
 const { scanDatabase } = require("./lib/db-scanner");
 const { verifySingleItem, verifyCommand } = require("./lib/verifier");
 const { exportMarkdownToPdf } = require("./lib/pdf-exporter");
+const { scanEntryCandidates } = require("./lib/entry-scanner");
 
 const cwd = process.cwd();
 
@@ -45,6 +46,10 @@ function main() {
   switch (command) {
     case "init":
       initProject(args.slice(1));
+      return;
+    case "scan-entries":
+    case "scan":
+      scanEntryCandidates(cwd, args.slice(1));
       return;
     case "scandb":
       scanDatabase(cwd);
@@ -735,9 +740,15 @@ function showStatus(showHeading = true) {
 
   if (fs.existsSync(overviewPath)) {
     const content = fs.readFileSync(overviewPath, "utf8");
-    const typeMatch = content.match(/-\s*\*\*判定結果\*\*：`([^`]+)`/);
-    const pathMatch = content.match(/-\s*\*\*目標系統路徑\*\*：`([^`]+)`/);
-    const gitMatch = content.match(/-\s*\*\*目標系統 Git 分支 \(Branch\)\*\*：`([^`]+)`/);
+    const typeMatch = content.match(
+      /-\s*\*\*(?:判定結果|判定结果|System Type|システム種別|시스템 유형)\*\*[：:]\s*`([^`]+)`/i
+    );
+    const pathMatch = content.match(
+      /-\s*\*\*(?:目標系統路徑|目标系统路径|Target System Path|対象システムパス|대상 시스템 경로)\*\*[：:]\s*`([^`]+)`/i
+    );
+    const gitMatch = content.match(
+      /-\s*\*\*(?:目標系統 Git 分支(?: \(Branch\))?|目标系统 Git 分支(?: \(Branch\))?|Target(?: System)? Git Branch|対象システム Git ブランチ|대상 시스템 Git 브랜치)\*\*[：:]\s*`([^`]+)`/i
+    );
     console.log(`目標系統路徑: ${pathMatch ? pathMatch[1] : "未標示"}`);
     console.log(`系統型態判定: ${typeMatch ? typeMatch[1] : "未判定"}`);
     console.log(`目標 Git 分支: ${gitMatch ? gitMatch[1] : "未標示"}`);
@@ -760,9 +771,9 @@ function showStatus(showHeading = true) {
     return;
   }
 
-  const completed = items.filter((i) => i.status.includes("已完成") || i.status.toLowerCase().includes("completed")).length;
-  const pendingBacklog = items.filter((i) => i.status.includes("待確認") || i.status.includes("Backlog")).length;
-  console.log(`已完成: ${completed} | 待確認: ${pendingBacklog} | 待分析/分析中: ${items.length - completed - pendingBacklog}`);
+  const completed = items.filter((i) => /已完成|completed|done|完了|완료/i.test(i.status)).length;
+  const pendingBacklog = items.filter((i) => isPendingStatus(i.status) || /backlog/i.test(i.status)).length;
+  console.log(`已完成: ${completed} | 待確認: ${pendingBacklog} | 待分析/分析中: ${Math.max(0, items.length - completed - pendingBacklog)}`);
 
   for (const item of items.slice(0, 10)) {
     console.log(`- [${item.id}] (${item.category}) ${item.name} | 複雜度: ${item.complexity} | 狀態: ${item.status}`);
@@ -774,6 +785,7 @@ function showHelp() {
 
 Usage (CLI Commands):
   refactor-analyze init [--full] [--lang zh-TW|zh-CN|en|ja|ko] [--target <path>]
+  refactor-analyze scan-entries [target] [--write-index] [--force] [--json]
   refactor-analyze scandb
   refactor-analyze analyze <編號> [--target <path>]
   refactor-analyze reanalyze <編號> [--target <path>]

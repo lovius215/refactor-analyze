@@ -60,7 +60,8 @@
 
 | 단계 | CLI 명령어 | AI 대화 명령어 | 약어 | 설명 |
 |---|---|---|---|---|
-| **1. 초기화 및 시스템 개요** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [경로]` | `rai` | 워크스페이스 및 Git 생성, 언어 확정, 대상 경로 및 원격 정렬 여부 확인, `project/system/`, 전역 도메인 사전 `domain-dictionary.md`, 번호 목록 `project/index.md` 산출. |
+| **1. 초기화 및 시스템 개요** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [경로]` | `rai` | 워크스페이스 및 Git 생성, 언어 확정, 대상 경로 및 원격 정렬 여부 확인; **스캔 전 3가지 스캔 모드(1. 전체 AI 스캔 / 2. 프로그램 스캔 / 3. 하이브리드 스캔)를 제시·선택**하고 불확실한 항목은 능동적으로 질문하여 `project/system/`, `domain-dictionary.md`, `project/index.md` 산출. |
+| **1.5 0-Token 진입점 후보 사전 스캔** | `refactor-analyze scan-entries [경로] [--write-index] [--force]` | - | - | **0-Token 규모 및 라우트 사전 스캔**: `project/system/entry-candidates.md` 생성(하이브리드 스캔용) 또는 `--write-index`로 초판 `project/index.md` 직접 생성(기존 항목이 있으면 `--force` 필요). |
 | **2. DB 컬럼 스캔** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | `db-connection.md`(점프 호스트 지원)를 기반으로 실제 DB에서 모든 테이블/컬럼/Trigger를 스캔하여 `db-schema.md` 및 `db/<table>.md` 생성. |
 | **3. 번호별 심층 분석** | `refactor-analyze analyze <번호>` | `refactor:analyze <번호>` | `raa` | `domain-dictionary.md`를 우선 상속하고 `project/<번호>/`를 생성하여 비즈니스 로직, **화면 조작 동작 및 유효성 검증(`ui-behavior.md`)**, 데이터 흐름, SQL, 의존성, 데드코드를 분석하며 **구조화된 지식 증빙 `backlog.md` 자동 생성**. |
 | **4. 번호별 재분석** | `refactor-analyze reanalyze <번호>` | `refactor:reanalyze <번호>` | `rar` | 인터뷰·규격서로 확정 서명된 `backlog.md` 증빙(`[Human: ...]#BL-xx`)과 최신 코드 변경을 반영해 **재분석**하고 모든 문서 갱신. |

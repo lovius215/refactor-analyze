@@ -60,7 +60,8 @@
 
 | 段階 | CLI コマンド | AI チャットコマンド | 短縮形 | 説明 |
 |---|---|---|---|---|
-| **1. 初期化と全体概要** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [パス]` | `rai` | ワークスペースと Git を構築、言語確認、対象システムパスとリモート同期確認、`project/system/`、共通業務辞書 `domain-dictionary.md`、番号付き一覧 `project/index.md` を生成。 |
+| **1. 初期化と全体概要** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [パス]` | `rai` | ワークスペースと Git を構築、言語確認、対象システムパスとリモート同期確認；**スキャン前に3つのモード（1. 全AIスキャン / 2. プログラムスキャン / 3. ハイブリッドスキャン）を提案・選択**し、不確実な点は能動的に質問して `project/system/`、`domain-dictionary.md`、`project/index.md` を生成。 |
+| **1.5 0-Token エントリ候補事前スキャン** | `refactor-analyze scan-entries [パス] [--write-index] [--force]` | - | - | **0-Token 規模＆ルーティング事前スキャン**：`project/system/entry-candidates.md` を出力（ハイブリッドスキャン用）。`--write-index` で初版 `project/index.md` を直接生成（既存項目がある場合は `--force` が必要）。 |
 | **2. DB カラムスキャン** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | `db-connection.md`（踏み台対応）に基づき DB から全テーブル・カラム・Trigger を取得し、`db-schema.md` と `db/<table>.md` を生成。 |
 | **3. 番号別詳細分析** | `refactor-analyze analyze <番号>` | `refactor:analyze <番号>` | `raa` | `domain-dictionary.md` を優先継承し、`project/<番号>/` を作成して業務ロジック、**画面操作挙動と入力検証（`ui-behavior.md`）**、データフロー、SQL、依存関係、デッドコードを分析し、**構造化証跡 `backlog.md` を自動生成**。 |
 | **4. 番号別再分析** | `refactor-analyze reanalyze <番号>` | `refactor:reanalyze <番号>` | `rar` | ヒアリングや仕様書で承認された `backlog.md` の証跡（`[Human: ...]#BL-xx`）を反映して**再分析**し、全ファイルを更新。 |

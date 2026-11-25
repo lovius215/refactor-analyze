@@ -52,7 +52,8 @@
 
 | 階段 | CLI 指令 | AI 對話指令 | 簡寫 | 說明 |
 |---|---|---|---|---|
-| **1. 初始化與系統大概** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [路徑]` | `rai` | 建立工作區與 Git、確認語言、詢問目標路徑與是否向 remote 對齊，產出 `project/system/` 大概、全域業務辭典 `domain-dictionary.md` 與分類編號清單 `project/index.md`。 |
+| **1. 初始化與系統大概** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [路徑]` | `rai` | 建立工作區與 Git、確認語言、詢問目標路徑與是否向 remote 對齊；**掃描前主動提供三種模式選擇（1. 全 AI 掃描 / 2. 程式掃描 / 3. 混合掃描）**，遇不確定性主動提問，產出 `project/system/`、全域業務辭典 `domain-dictionary.md` 與分類編號清單 `project/index.md`。 |
+| **1.5 0-Token 候選進入點預掃** | `refactor-analyze scan-entries [路徑] [--write-index] [--force]` | - | - | **0-Token 規模與路由特徵預掃描**：產出 `project/system/entry-candidates.md`（供「混合掃描」由 AI 語意分類，或加 `--write-index` 直接產出「程式掃描」初版清單；若 `index.md` 已有內容需加 `--force`）。 |
 | **2. 掃描資料庫欄位** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | 依據 `project/system/db-connection.md`（支援跳板機）實際連進資料庫抓取所有欄位與 Trigger，產出 `db-schema.md` 與 `db/<table>.md`。 |
 | **3. 分析單一編號** | `refactor-analyze analyze <編號>` | `refactor:analyze <編號>` | `raa` | 優先繼承 `domain-dictionary.md`，新建 `project/<編號>/` 資料夾深入分析業務邏輯、**畫面操作行為與驗證（`ui-behavior.md`）**、資料流、SQL、依賴、死程式碼，並**自動建立結構化業務憑證庫 `backlog.md`**。 |
 | **4. 重新分析單一編號** | `refactor-analyze reanalyze <編號>` | `refactor:reanalyze <編號>` | `rar` | 根據訪談調查與 `backlog.md` 憑證簽核結果**再分析一次**，將 `[Human: ...]#BL-xx` 引用正式更新至文件。 |

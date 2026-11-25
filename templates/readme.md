@@ -9,7 +9,8 @@
 
 | 步驟 | CLI 指令 | AI 對話指令 | 簡寫 | 說明 |
 |---|---|---|---|---|
-| 1 | `refactor-analyze init [--full]` | `refactor:init [路徑]` | `rai` | 確認語言、詢問目標系統路徑與是否向 remote 對齊，產出 `project/system/` 大概、`domain-dictionary.md` 與分類編號清單 `project/index.md`。 |
+| 1 | `refactor-analyze init [--full]` | `refactor:init [路徑]` | `rai` | 確認語言、詢問目標系統路徑與是否向 remote 對齊；**掃描前主動提供三種掃描模式（1. 全 AI 掃描 / 2. 程式掃描 / 3. 混合掃描）**，遇不確定性主動提問，產出 `project/system/`、`domain-dictionary.md` 與分類編號清單 `project/index.md`。 |
+| 1.5 | `refactor-analyze scan-entries [路徑] [--write-index] [--force]` | - | - | **0-Token 規模與候選進入點預掃描**：輸出 `project/system/entry-candidates.md`（供混合掃描使用，或加 `--write-index` 寫入初版 `index.md`；若 `index.md` 已有內容需加 `--force`）。 |
 | 2 | `refactor-analyze scandb` | `refactor:scandb` | `ras` | 依據 `project/system/db-connection.md`（支援跳板機）實際連進資料庫抓取所有資料表、欄位與 Trigger，產出 `db-schema.md` 與 `db/<table>.md`。 |
 | 3 | `refactor-analyze analyze <編號>` | `refactor:analyze <編號>` | `raa` | 優先繼承 `domain-dictionary.md`，依編號新建 `project/<編號>/` 資料夾深入分析業務邏輯、畫面操作行為與驗證（`ui-behavior.md`）、資料流、SQL、依賴、死程式碼，並**自動產出結構化憑證 `backlog.md`**。 |
 | 4 | `refactor-analyze reanalyze <編號>` | `refactor:reanalyze <編號>` | `rar` | 根據 `backlog.md` 已簽核拍板之業務憑證（`[Human: ...]#BL-xx`）或程式碼變更**再分析一次**，更新 `project/<編號>/` 所有文件。 |

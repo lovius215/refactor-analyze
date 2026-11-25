@@ -44,7 +44,12 @@ description: 用 init、scandb、analyze <編號>、reanalyze <編號>、commit 
    - 若使用者未提供要分析的目標系統路徑，主動詢問路徑。
    - 讀取目標系統的 Git 資訊（目前分支 `git rev-parse --abbrev-ref HEAD`、目前 Commit Hash `git rev-parse HEAD`、Tag 與工作區狀態）。
    - **主動詢問使用者**：「目標系統與目前分析工作區是否有需要向 remote 對齊（`git fetch` / `git pull`）？」若使用者表示需要，先協助完成對齊。
-4. **低 Token 掃描產出 `project/system/` 與 `project/index.md`**：
+4. **掃描前評估規模並選擇掃描模式（Scan Mode Selection）**：
+   - 正式掃描進入點前，AI 應先檢視目標系統規模與框架類型，並**主動提供三種掃描模式讓使用者選擇**（依規模提供推薦）：
+     1. **全 AI 掃描（Full AI Scan）**：全程由 AI 深度閱讀原始碼與設定檔抓取進入點（適合中小型專案，或動態路由／反射派發／XML 設定極複雜的舊系統）。
+     2. **程式掃描（Programmatic Scan）**：執行本機 CLI `refactor-analyze scan-entries --write-index` 以 0-Token 規則掃描快速產出 `project/index.md` 初版清單（適合超大型標準框架專案快速盤點）。
+     3. **混合掃描（Hybrid Scan，推薦預設）**：先執行本機 CLI `refactor-analyze scan-entries` 產出 0-Token 候選進入點清單 `project/system/entry-candidates.md`，再由 AI 讀取候選檔案進行語意判讀、業務模組分類、廢棄判定與盲區補漏後寫入 `project/index.md`。
+5. **掃描產出 `project/system/` 與 `project/index.md`**：
    - **`project/system/overview.md`**：記錄執行分析時間日期、目標系統路徑、Git 分支與 Commit Hash，並**判斷系統屬於 Mobile APP、桌面應用程式（Application）還是網頁系統（Web）**，附上該型態涵蓋範圍的完整說明。
    - **`project/system/tech-stack.md`**：盤點現行系統使用的程式語言、版本、核心框架、建置工具與第三方依賴套件。
    - **`project/system/architecture.md`**：盤點現行架構模式、目錄職責，以及**全域隱性機制（Filter / Interceptor / AOP / Middleware / 全域異常處理 / 權限驗證機制）**。
@@ -52,6 +57,8 @@ description: 用 init、scandb、analyze <編號>、reanalyze <編號>、commit 
    - **`project/index.md`（分類編號總清單）**：
      - **同分類放在一起**（依業務模組分類分組），**無法歸類的統一放在最後的「其他」分類**。
      - 每一項賦予唯一**編號**（如 `001`、`002`），只記錄：**編號**、**功能或 API**、**程式的位置（進入點）**、**複雜度（高/中/低）**、**目前的狀態**（`待分析` / `疑似廢棄`）。
+6. **掃描遇不確定性時主動向使用者提出（Proactive Uncertainty Reporting）**：
+   - 若在掃描程式碼、設定檔或進入點時遇到不確定性（例如：動態路由／反射派發無法確定實際 URL、未綁定路由但可能由外部 Gateway／選單／排程呼叫的進入點、多模組範圍界定不明、缺少關鍵設定檔或外部依賴原始碼），**嚴禁自行猜測或靜默略過**，必須在回覆中主動條列具體問題（附上檔案路徑與行號）向使用者確認，並暫標為 `待確認` 或 `疑似廢棄`。
 
 ---
 

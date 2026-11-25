@@ -52,7 +52,8 @@
 
 | 阶段 | CLI 指令 | AI 对话指令 | 简写 | 说明 |
 |---|---|---|---|---|
-| **1. 初始化与系统概览** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [路径]` | `rai` | 建立工作区与 Git、确认语言、询问目标路径与是否向 remote 对齐，产出 `project/system/`、全域业务词典 `domain-dictionary.md` 与分类编号清单 `project/index.md`。 |
+| **1. 初始化与系统概览** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [路径]` | `rai` | 建立工作区与 Git、确认语言、询问目标路径与是否向 remote 对齐；**扫描前主动提供三种模式选择（1. 全 AI 扫描 / 2. 程序扫描 / 3. 混合扫描）**，遇不确定性主动提问，产出 `project/system/`、全域业务词典 `domain-dictionary.md` 与分类编号清单 `project/index.md`。 |
+| **1.5 0-Token 候选入口点预扫** | `refactor-analyze scan-entries [路径] [--write-index] [--force]` | - | - | **0-Token 规模与路由特征预扫描**：产出 `project/system/entry-candidates.md`（供“混合扫描”由 AI 语义分类，或加 `--write-index` 直接产出“程序扫描”初版清单；若 `index.md` 已有内容需加 `--force`）。 |
 | **2. 扫描数据库字段** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | 依据 `project/system/db-connection.md`（支持跳板机）实际连入数据库抓取所有字段与 Trigger，产出 `db-schema.md` 与 `db/<table>.md`。 |
 | **3. 分析单一编号** | `refactor-analyze analyze <编号>` | `refactor:analyze <编号>` | `raa` | 优先继承 `domain-dictionary.md`，新建 `project/<编号>/` 文件夹深入分析业务逻辑、**画面操作行为与验证（`ui-behavior.md`）**、数据流、SQL、依赖、死代码，并**自动建立结构化业务凭证库 `backlog.md`**。 |
 | **4. 重新分析单一编号** | `refactor-analyze reanalyze <编号>` | `refactor:reanalyze <编号>` | `rar` | 根据访谈调查与 `backlog.md` 凭证签核结果**再分析一次**，将 `[Human: ...]#BL-xx` 引用正式更新至文档。 |

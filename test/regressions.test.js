@@ -603,3 +603,82 @@ test("regression: pdf blocks direct db-connection.md export, and SQLite scandb i
     fs.rmSync(workDir, { recursive: true, force: true });
   }
 });
+
+test("regression: scan-entries skips comments/tests, deduplicates JSP, protects existing index.md without --force, and status supports multilingual labels", () => {
+  const targetDir = makeTempDir("ra-scantarget-");
+  const workDir = makeTempDir("ra-scanwork-");
+  try {
+    fs.mkdirSync(path.join(targetDir, "src", "api"), { recursive: true });
+    fs.mkdirSync(path.join(targetDir, "tests"), { recursive: true });
+    fs.writeFileSync(
+      path.join(targetDir, "src", "api", "OrderController.java"),
+      `@RestController\r\n// @GetMapping("/commented-out")\r\n@RequestMapping("/orders")\r\npublic class OrderController {\r\n  @PostMapping("/create")\r\n  public void create() {}\r\n}\r\n`,
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(targetDir, "src", "api", "routes.js"),
+      `app.get("/health", (req, res) => res.send("ok"));\n`,
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(targetDir, "src", "api", "routes.test.js"),
+      `app.get("/mock-only", () => {});\n`,
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(targetDir, "tests", "fake.js"),
+      `app.post("/fake-test", () => {});\n`,
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(targetDir, "src", "api", "legacy.jsp"),
+      `<servlet-mapping>dummy</servlet-mapping>\n`,
+      "utf8"
+    );
+
+    runCli(workDir, ["init", "--target", targetDir]);
+    const scanRes = runCli(workDir, ["scan-entries", "--write-index"]);
+    assert.equal(scanRes.status, 0, `scan-entries failed: ${scanRes.stderr}`);
+    // 3 in OrderController (comment skipped) + 1 in routes.js + 1 deduplicated in legacy.jsp = 5
+    assert.match(scanRes.stdout, /候選進入點: 偵測到 5 處特徵/);
+
+    const candidatesMd = fs.readFileSync(path.join(workDir, "project", "system", "entry-candidates.md"), "utf8");
+    assert.doesNotMatch(candidatesMd, /commented-out/);
+    assert.doesNotMatch(candidatesMd, /routes\.test\.js/);
+    assert.doesNotMatch(candidatesMd, /fake\.js/);
+    assert.equal((candidatesMd.match(/legacy\.jsp#L1/g) || []).length, 1);
+
+    const items = parseIndexItems(workDir);
+    assert.equal(items.length, 5);
+
+    // Second --write-index without --force must refuse to overwrite existing index.md!
+    fs.writeFileSync(
+      path.join(workDir, "project", "index.md"),
+      `# Index\n| ID | API | Loc | Complexity | Status |\n|---|---|---|---|---|\n| \`001\` | Custom Keep | \`a.js\` | High | Completed |\n| \`002\` | Pending API | \`b.js\` | Low | Pending |\n`,
+      "utf8"
+    );
+    const blockedRes = runCli(workDir, ["scan-entries", "--write-index"]);
+    assert.notEqual(blockedRes.status, 0, "Should block overwriting non-empty index.md without --force");
+    assert.match(blockedRes.stderr, /安全保護/);
+    assert.match(fs.readFileSync(path.join(workDir, "project", "index.md"), "utf8"), /Custom Keep/);
+
+    // Verify multilingual status parsing on English overview.md and index.md
+    fs.writeFileSync(
+      path.join(workDir, "project", "system", "overview.md"),
+      `# Overview\n- **Target System Path**: \`${targetDir}\`\n- **System Type**: \`Web\`\n- **Target System Git Branch**: \`main\`\n`,
+      "utf8"
+    );
+    const statusRes = runCli(workDir, ["status"]);
+    assert.equal(statusRes.status, 0);
+    assert.match(statusRes.stdout, /系統型態判定: Web/);
+    assert.match(statusRes.stdout, /已完成: 1 \| 待確認: 1 \| 待分析\/分析中: 0/);
+
+    // With --force, --write-index overwrites cleanly
+    const forceRes = runCli(workDir, ["scan-entries", "--write-index", "--force"]);
+    assert.equal(forceRes.status, 0, `scan-entries --force failed: ${forceRes.stderr}`);
+    assert.equal(parseIndexItems(workDir).length, 5);
+  } finally {
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});

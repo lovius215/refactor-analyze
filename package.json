@@ -1,6 +1,6 @@
 {
   "name": "@loviusc/refactor-analyze",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "AI-assisted legacy system refactoring analysis workspace CLI (supports Gemini, Claude, GPT/Codex)",
   "publishConfig": {
     "access": "public",
@@ -26,7 +26,7 @@
     "README*.md"
   ],
   "scripts": {
-    "check": "node --check src/cli.js && node --check src/lib/utils.js && node --check src/lib/db-scanner.js && node --check src/lib/verifier.js && node --check src/lib/pdf-exporter.js && node --check bin/refactor-analyze.js && node scripts/sync-templates.js --check",
+    "check": "node --check src/cli.js && node --check src/lib/utils.js && node --check src/lib/db-scanner.js && node --check src/lib/entry-scanner.js && node --check src/lib/verifier.js && node --check src/lib/pdf-exporter.js && node --check bin/refactor-analyze.js && node scripts/sync-templates.js --check",
     "sync-templates": "node scripts/sync-templates.js",
     "test": "node --test test/*.test.js"
   },

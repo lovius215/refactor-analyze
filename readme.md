@@ -110,7 +110,8 @@ scripts\uninstall.bat
 
 | 階段 | CLI 終端機指令 | AI 對話指令 | 簡寫 | 用途說明 |
 |---|---|---|---|---|
-| **1. 初始化與系統大概** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [路徑]` | `rai` | 建立工作區、`db-connection.md` 與 Git、確認語言、詢問目標系統路徑與是否向 remote 對齊，產出 `project/system/` 大概與分類編號清單 `project/index.md`。 |
+| **1. 初始化與系統大概** | `refactor-analyze init [--full] [--lang ...]` | `refactor:init [路徑]` | `rai` | 建立工作區、`db-connection.md` 與 Git、確認語言、詢問目標系統路徑與是否向 remote 對齊；**掃描前主動提供三種模式選擇（1. 全 AI 掃描 / 2. 程式掃描 / 3. 混合掃描）**，遇不確定性主動提問，產出 `project/system/` 與分類編號清單 `project/index.md`。 |
+| **1.5 0-Token 候選進入點預掃** | `refactor-analyze scan-entries [路徑] [--write-index] [--force]` | - | - | **0-Token 規模與路由特徵預掃描**：快速統計程式碼規模並產出候選進入點清單 `project/system/entry-candidates.md`（供「混合掃描」給 AI 接手分類，或加 `--write-index` 直接產出「程式掃描」初版清單；若 `index.md` 已有資料需加 `--force` 才會覆寫）。 |
 | **2. 掃描資料庫欄位** | `refactor-analyze scandb` | `refactor:scandb` | `ras` | 依據 `project/system/db-connection.md`（支援跳板機）實際連進資料庫 Scan 所有 Table、欄位、關聯、View、Stored Procedure 與 Trigger，產出 `db-schema.md` 與 `db/<table>.md`。 |
 | **3. 分析單一編號** | `refactor-analyze analyze <編號>` | `refactor:analyze <編號>` | `raa` | 新建 `project/<編號>/` 資料夾，深入分析業務邏輯、資料流、SQL、依賴關係、死程式碼、複雜度與重構建議，並**自動產出 `backlog.md`**。 |
 | **4. 重新分析單一編號** | `refactor-analyze reanalyze <編號>` | `refactor:reanalyze <編號>` | `rar` | 根據 `backlog.md` 補充內容或程式碼/DB 變更**再分析一次**，更新 `project/<編號>/` 內所有文件與分析時間、Git 版本。 |

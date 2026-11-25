@@ -16,6 +16,7 @@
   1. **無註解之狀態碼或魔術數字（Magic Numbers）**：例如程式碼寫 `if (order.getStatus() == 4)`，但專案內無 Enum 或註解定義 `4` 代表什麼，AI 只能記錄「當 `status == 4` 時執行...（`4` 之業務語意未明）」，並將「`order.status == 4` 的業務定義」列入 `backlog.md`。
   2. **縮寫或語意不明的資料表/API 欄位**：例如 `USR_LVL_TP`、`EXT_ATTR_2` 在資料庫無 Comment 且程式碼無明確說明時，一律列入 `backlog.md`。
   3. **外部系統 API 或缺少的 Stored Procedure**：當程式碼呼叫外部 HTTP URL、MQ Topic 或 DB Stored Procedure，但本專案與 DB 中找不到其內部邏輯時，僅記錄呼叫參數與回傳處理，並將未知內部行為列入 `backlog.md`。
+  4. **掃描階段的不確定性（動態路由／疑似廢棄進入點／缺檔）**：在 `init` 或 `analyze` 掃描程式碼期間，只要無法確定動態派發目標、進入點是否仍被外部系統呼叫、或缺少關鍵設定檔／二進位依賴原始碼，**必須主動在對話中向使用者提出具體問題（附檔案路徑與行號）請求確認**，不可自行猜測或靜默略過。
 
 ## 3. 原文忠實性與 CLI 0-Token 自動驗證 (`verify`)
 

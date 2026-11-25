@@ -11,8 +11,9 @@
    - 每一條業務規則、驗證邏輯與狀態轉換，**必須標註對應的原始碼檔案路徑與行號範圍**（例如 `` `src/service/OrderService.java#L45-L92` ``）或資料庫表名/欄位來源。
 2. **禁止憑「一般系統常識」自行腦補**：
    - 嚴禁因為看到類別名稱、方法名稱、縮寫欄位（如 `FLG_01`、`STS_CD = '9'`）或魔術數字，就自行猜測商業含義或補上程式碼中不存在的流程與規則。
-3. **凡無明確來源或語意不明者，強制列入 `backlog.md`**：
-   - 只要在程式碼、設定檔或資料庫中找不到明確定義或註解，**一律禁止寫入確定版邏輯**，必須如實記錄於 `project/<編號>/backlog.md` 標記待人工釐清，待使用者補充後再透過 `reanalyze <編號>` 更新。
+3. **凡無明確來源或語意不明者，主動向使用者提出並列入 `backlog.md`**：
+   - 只要在程式碼、設定檔或資料庫中找不到明確定義或註解，**一律禁止寫入確定版邏輯**。
+   - 無論是在 `init`（掃描進入點/架構）或 `analyze`（深入分析）階段，只要遇到**不確定性**（例如動態路由/反射派發、無法判定是否為外部排程或 Gateway 呼叫的疑似廢棄進入點、缺少設定檔或外部 JAR/DLL 原始碼、語意不明的魔術數字與縮寫），**AI 必須主動在對話中向使用者明確提出具體疑問（附檔案路徑與行號）請求釐清**，並同步標記於 `project/index.md` 或記錄於 `project/<編號>/backlog.md`，待使用者補充後再透過 `reanalyze <編號>` 更新。
 
 ---
 
@@ -20,7 +21,7 @@
 
 | AI 指令 | 簡寫 | 對應 CLI 指令 | 用途 | 執行規則 |
 |---|---|---|---|---|
-| `refactor:init [路徑]` | `rai` | `refactor-analyze init` | 初始化與產出系統大概 | 載入 `AGENTS.md`、`skills/refactor-analyze/SKILL.md` 與 `rules/`；確認並鎖定語言（`zh-TW`/`zh-CN`/`en`/`ja`/`ko`）；確認本工作區 Git 狀態；若未提供目標系統路徑則主動詢問；檢查工作區與目標系統 Git 分支與 Commit Hash，並**主動詢問使用者是否需要先向 remote 對齊（fetch/pull）**；接著分析產出系統大概（`project/system/`）與分類編號清單（`project/index.md`）。 |
+| `refactor:init [路徑]` | `rai` | `refactor-analyze init` | 初始化與產出系統大概 | 載入 `AGENTS.md`、`skills/refactor-analyze/SKILL.md` 與 `rules/`；確認並鎖定語言（`zh-TW`/`zh-CN`/`en`/`ja`/`ko`）；確認本工作區 Git 狀態；若未提供目標系統路徑則主動詢問；檢查工作區與目標系統 Git 分支與 Commit Hash，並**主動詢問使用者是否需要先向 remote 對齊（fetch/pull）**；掃描前先評估專案規模並**主動提供三種掃描模式讓使用者選擇（1. 全 AI 掃描 / 2. 程式掃描 `scan-entries --write-index` / 3. 混合掃描 `scan-entries` + AI 語意分類）**；接著產出系統大概（`project/system/`）與分類編號清單（`project/index.md`）。 |
 | `refactor:scandb` | `ras` | `refactor-analyze scandb` | 連結資料庫掃描欄位 | 由本機 CLI 讀取 `project/system/db-connection.md`（**帳密不進入 AI Context**；支援 SQLite、MySQL/MariaDB、PostgreSQL、SQL Server `sqlcmd`、Oracle `sqlplus` 與獨立 SSH ControlMaster 跳板機通道），強制啟用**唯讀 Session** 抓取所有 Table、欄位、型別、PK/FK、Index、欄位註解（Comment）、View、Stored Procedure 與 Trigger，產出 `project/system/db-schema.md` 與 `project/system/db/<table>.md`。 |
 | `refactor:analyze <編號>` | `raa` | `refactor-analyze analyze <編號>` | 依編號深入分析業務邏輯 | 依據 `project/index.md` 的「編號」自動新建以編號命名的獨立資料夾 `project/<編號>/`；記錄執行分析時間日期、目標系統當下 Git 分支與 Commit Hash；從程式位置（進入點）深入分析並對照 `project/system/db/` 與 `project/shared/`，產出 `analysis.md`、`business-logic.md`、`ui-behavior.md`（畫面操作行為與驗證）、`data-flow.md`、`sql.md`、`dependencies.md`、`dead-code.md`，並**自動產出 `backlog.md`**。 |
 | `refactor:reanalyze <編號>` | `rar` | `refactor-analyze reanalyze <編號>` | 補充 Backlog 後重新分析 | 讀取 `project/<編號>/backlog.md` 內使用者補充的業務邏輯或欄位定義（以及目標系統最新程式碼、DB 與 Git 分支/Hash），**再分析一次**並同步更新 `project/<編號>/` 內所有文件與執行分析時間日期。 |
