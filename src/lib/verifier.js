@@ -3,13 +3,18 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 const {
   normalizeItemId,
+  splitMarkdownRow,
+  isMarkdownSeparatorRow,
+  isResolvedStatus,
+  isPlaceholderValue,
   getTargetSystemPathFromOverview,
   getOption,
   getPositionalArgs,
   fail
 } = require("./utils");
 
-const CITATION_REGEX = /`([^`\n]+?\.[a-zA-Z0-9]{1,10})#L(\d+)(?:-(?:L)?(\d+))?`/g;
+const CITATION_REGEX =
+  /`((?:[^`\n]*\/)?(?:[a-zA-Z0-9_.-]+\.[a-zA-Z0-9]{1,10}|Dockerfile(?:\.[a-zA-Z0-9_.-]+)?|Makefile|Jenkinsfile|Vagrantfile|Procfile|Gemfile|Rakefile))#L(\d+)(?:-(?:L)?(\d+))?`/g;
 const VOUCHER_REGEX = /`\[(Human|Doc|DB|Decision)[^`\]\n]*\]#(BL-\d+)`/g;
 const DB_REF_REGEX = /(?:project\/system\/)?db\/([a-zA-Z0-9_.-]+\.md)/g;
 
@@ -36,14 +41,7 @@ function extractCitationsFromText(text, docName) {
   CITATION_REGEX.lastIndex = 0;
   while ((match = CITATION_REGEX.exec(proseText)) !== null) {
     const filePath = match[1].trim();
-    if (
-      filePath.includes("{{") ||
-      filePath.startsWith("path/to/") ||
-      filePath === "src/service/OrderService.java" ||
-      filePath === "src/views/OrderForm.vue" ||
-      filePath === "OrderEditForm.cs" ||
-      filePath === "order_edit.jsp"
-    ) {
+    if (filePath.includes("{{") || filePath.startsWith("path/to/") || filePath.includes("<")) {
       continue;
     }
     const startLine = parseInt(match[2], 10);
@@ -80,35 +78,27 @@ function parseBacklogVouchers(backlogContent) {
   const lines = (backlogContent || "").replace(/\r\n/g, "\n").split("\n");
   for (const line of lines) {
     // Stop before Section 2 (Reality Check) so 6-column verification rows never overwrite Section 1 vouchers
-    if (/^##\s+2\./.test(line) || /真實資料真偽驗證探針|Reality Check/i.test(line)) {
+    if (/^##\s+2\./.test(line) || /真實資料真偽驗證探針|真实数据真伪验证探针|Reality Check/i.test(line)) {
       break;
     }
-    if (
-      !line.startsWith("|") ||
-      line.includes("憑證編號") ||
-      line.includes("憑證 ID") ||
-      line.includes("---")
-    ) {
+    if (!line.startsWith("|")) continue;
+    const parts = splitMarkdownRow(line);
+    if (parts.length < 6 || isMarkdownSeparatorRow(parts)) continue;
+    if (/^(?:憑證編號|憑證\s*ID|凭证\s*ID|Voucher\s*ID|証憑\s*ID|바우처\s*ID)$/i.test(parts[0].replace(/[`*]/g, "").trim())) {
       continue;
     }
-    const parts = line
-      .split("|")
-      .map((p) => p.trim())
-      .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-    if (parts.length >= 6) {
-      const id = parts[0].replace(/`/g, "").trim();
-      if (!id || id.includes("待分析") || id.includes("{{")) continue;
-      // Typical columns: ID | Type | Location | Question | Conclusion | SourceType | Evidence | Signoff | Scope | Status
-      const status = parts[parts.length - 1].replace(/`/g, "").trim();
-      const signoff = parts.length >= 8 ? parts[parts.length - 3].replace(/`/g, "").trim() : "";
-      const conclusion = parts.length >= 5 ? parts[4].replace(/`/g, "").trim() : "";
-      vouchers.set(id, {
-        id,
-        status,
-        signoff,
-        conclusion
-      });
-    }
+    const id = parts[0].replace(/`/g, "").trim();
+    if (!id || id.includes("待分析") || id.includes("{{") || id.startsWith("*(")) continue;
+    // Typical columns: ID | Type | Location | Question | Conclusion | SourceType | Evidence | Signoff | Scope | Status
+    const status = parts[parts.length - 1].replace(/`/g, "").trim();
+    const signoff = parts.length >= 8 ? parts[parts.length - 3].replace(/`/g, "").trim() : "";
+    const conclusion = parts.length >= 5 ? parts[4].replace(/`/g, "").trim() : "";
+    vouchers.set(id, {
+      id,
+      status,
+      signoff,
+      conclusion
+    });
   }
   return vouchers;
 }
@@ -120,11 +110,9 @@ function getFileLineCount(targetDir, relFilePath, recordedCommitHash) {
   if (relCheck.startsWith("..") || path.isAbsolute(relCheck)) {
     return { exists: false, source: null, lines: 0 };
   }
-  if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
-    const content = fs.readFileSync(absPath, "utf8");
-    return { exists: true, source: "worktree", lines: content.split("\n").length };
-  }
 
+  // Prefer the recorded Git Commit baseline when available so post-analysis target repo commits
+  // trigger a drift warning instead of false line-out-of-range errors.
   if (recordedCommitHash && /^[0-9a-f]{7,40}$/i.test(recordedCommitHash)) {
     const cleanRel = relFilePath.replace(/\\/g, "/").replace(/^\.\//, "");
     const gitShow = spawnSync("git", ["show", `${recordedCommitHash}:${cleanRel}`], {
@@ -134,6 +122,11 @@ function getFileLineCount(targetDir, relFilePath, recordedCommitHash) {
     if (gitShow.status === 0 && gitShow.stdout != null) {
       return { exists: true, source: `git:${recordedCommitHash}`, lines: gitShow.stdout.split("\n").length };
     }
+  }
+
+  if (fs.existsSync(absPath) && fs.statSync(absPath).isFile()) {
+    const content = fs.readFileSync(absPath, "utf8");
+    return { exists: true, source: "worktree", lines: content.split("\n").length };
   }
 
   return { exists: false, source: null, lines: 0 };
@@ -227,14 +220,6 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
     }
   }
 
-  const isPlaceholderOrEmpty = (val) =>
-    !val ||
-    val === "-" ||
-    val.startsWith("*(") ||
-    val.includes("待確認") ||
-    val.includes("待填寫") ||
-    val.includes("待分析");
-
   // Verify business knowledge vouchers against backlog.md
   for (const v of allVouchers) {
     const bv = knownVouchers.get(v.voucherId);
@@ -242,11 +227,11 @@ function verifySingleItem(cwd, rawId, targetPathOverride = null) {
       errors.push(
         `[${v.docName}] 引用了不存在的 Backlog 業務憑證 ${v.raw}（未在 backlog.md 中定義）`
       );
-    } else if (!bv.status.includes("已釐清")) {
+    } else if (!isResolvedStatus(bv.status)) {
       errors.push(
         `[${v.docName}] 引用了尚未釐清的 Backlog 業務憑證 ${v.raw}（狀態為：${bv.status || "待確認"}，尚未由人工拍板確認）`
       );
-    } else if (isPlaceholderOrEmpty(bv.signoff) || isPlaceholderOrEmpty(bv.conclusion)) {
+    } else if (isPlaceholderValue(bv.signoff) || isPlaceholderValue(bv.conclusion)) {
       errors.push(
         `[${v.docName}] 引用之 Backlog 業務憑證 ${v.raw} 缺乏拍板人或決策結論，無法作為有效來源依據`
       );

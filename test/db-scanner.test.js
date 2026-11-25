@@ -353,7 +353,11 @@ if (sql.includes("USER_TAB_COLUMNS")) {
     const oraRes = runCli(workDir, ["scandb"], env);
     assert.equal(oraRes.status, 0, `oracle failed: ${oraRes.stderr}`);
     assert.match(oraRes.stdout, /已完成 Oracle 唯讀掃描：1 張表/);
-    assert.ok(fs.existsSync(path.join(workDir, "project", "system", "db", "ORA_ACCT.md")));
+    const oraAcctPath = path.join(workDir, "project", "system", "db", "ORA_ACCT.md");
+    assert.ok(fs.existsSync(oraAcctPath));
+    const oraAcctMd = fs.readFileSync(oraAcctPath, "utf8");
+    assert.match(oraAcctMd, /PK/);
+    assert.match(oraAcctMd, /PK_ORA_ACCT/);
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
     fs.rmSync(mockBin, { recursive: true, force: true });

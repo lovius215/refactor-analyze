@@ -5,7 +5,13 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const { aggregateDomainFlowsAndDeadCode, aggregateDomainDictionary, getPositionalArgs } = require("../src/lib/utils");
+const {
+  aggregateDomainFlowsAndDeadCode,
+  aggregateDomainDictionary,
+  parseIndexItems,
+  updateIndexRowStatus,
+  getPositionalArgs
+} = require("../src/lib/utils");
 const { parseDbConnectionConfig } = require("../src/lib/db-scanner");
 const { verifySingleItem } = require("../src/lib/verifier");
 const { markdownToHtmlBody } = require("../src/lib/pdf-exporter");
@@ -445,6 +451,154 @@ test("regression: backlog.md Section 2 Reality Check does not overwrite Section 
     assert.match(flows, /`orders`/);
     assert.match(flows, /## 3\. 自訂外部事件表/);
     assert.match(flows, /`OrderPaid`/);
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test("regression: index.md features containing '編號', '---', or escaped pipes \\| are not dropped as header rows", () => {
+  const workDir = makeTempDir("ra-idxhdr-");
+  try {
+    runCli(workDir, ["init"]);
+    const indexPath = path.join(workDir, "project", "index.md");
+    fs.writeFileSync(
+      indexPath,
+      `# Index\n## 分類：訂單模組\n| 編號 | 功能或 API | 程式的位置（進入點） | 複雜度 | 目前的狀態 |\n|---|---|---|---|---|\n| \`001\` | 訂單編號產生規則 \\| 發票編號查詢 | \`src/order---v2/OrderNum.java\` | 待評估 | 待分析 |\n`,
+      "utf8"
+    );
+
+    const items = parseIndexItems(workDir);
+    assert.equal(items.length, 1);
+    assert.equal(items[0].id, "001");
+    assert.equal(items[0].name, "訂單編號產生規則 | 發票編號查詢");
+    assert.equal(items[0].location, "src/order---v2/OrderNum.java");
+
+    const updated = updateIndexRowStatus(workDir, "001", "高", "已完成");
+    assert.equal(updated, true);
+    const afterText = fs.readFileSync(indexPath, "utf8");
+    assert.match(afterText, /訂單編號產生規則 \\\| 發票編號查詢/);
+    const afterItems = parseIndexItems(workDir);
+    assert.equal(afterItems[0].complexity, "高");
+    assert.equal(afterItems[0].status, "已完成");
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test("regression: verifier supports real OrderService.java, extensionless Dockerfile, and verifies against recorded commit when HEAD shrinks", () => {
+  const targetDir = makeTempDir("ra-ordtarget-");
+  const workDir = makeTempDir("ra-ordwork-");
+  try {
+    spawnSync("git", ["init"], { cwd: targetDir });
+    spawnSync("git", ["config", "user.email", "t@t.com"], { cwd: targetDir });
+    spawnSync("git", ["config", "user.name", "t"], { cwd: targetDir });
+
+    fs.mkdirSync(path.join(targetDir, "src", "service"), { recursive: true });
+    fs.writeFileSync(
+      path.join(targetDir, "src", "service", "OrderService.java"),
+      Array.from({ length: 12 }, (_, i) => `// line ${i + 1}`).join("\n") + "\n",
+      "utf8"
+    );
+    fs.writeFileSync(path.join(targetDir, "Dockerfile"), "FROM node:20\nWORKDIR /app\nCMD [\"node\",\"index.js\"]\n", "utf8");
+    spawnSync("git", ["add", "."], { cwd: targetDir });
+    spawnSync("git", ["commit", "-m", "c1"], { cwd: targetDir });
+
+    runCli(workDir, ["init", "--target", targetDir]);
+    runCli(workDir, ["analyze", "001"]);
+    const itemDir = path.join(workDir, "project", "001");
+    for (const f of ["ui-behavior.md", "data-flow.md", "sql.md", "dependencies.md", "dead-code.md", "backlog.md"]) {
+      fs.writeFileSync(path.join(itemDir, f), `# ${f}\nOK\n`, "utf8");
+    }
+    const analysisOrig = fs.readFileSync(path.join(itemDir, "analysis.md"), "utf8");
+    fs.writeFileSync(path.join(itemDir, "analysis.md"), analysisOrig.replace(/\*\(待 AI (?:分析)?填寫[^)]*\)\*/g, "OK"), "utf8");
+    fs.writeFileSync(
+      path.join(itemDir, "business-logic.md"),
+      "# 業務邏輯\n- 核心下單：`src/service/OrderService.java#L5-L10`\n- 容器啟動：`Dockerfile#L1-L3`\n",
+      "utf8"
+    );
+
+    // Now shrink OrderService.java in a newer commit c2 so worktree only has 2 lines
+    fs.writeFileSync(path.join(targetDir, "src", "service", "OrderService.java"), "// shortened\n", "utf8");
+    spawnSync("git", ["add", "."], { cwd: targetDir });
+    spawnSync("git", ["commit", "-m", "c2 shrink"], { cwd: targetDir });
+
+    const verRes = verifySingleItem(workDir, "001", targetDir);
+    assert.equal(verRes.valid, true, `Expected valid against recorded commit, got: ${verRes.errors.join("; ")}`);
+    assert.equal(verRes.citationCount, 2);
+    assert.ok(verRes.warnings.some((w) => w.includes("版本飄移警告")));
+  } finally {
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test("regression: multilingual (en) & escaped pipe \\| support in backlog vouchers, commit, and domain-dictionary", () => {
+  const workDir = makeTempDir("ra-i18npipe-");
+  try {
+    runCli(workDir, ["init", "--lang", "en"]);
+    spawnSync("git", ["config", "user.email", "t@t.com"], { cwd: workDir });
+    spawnSync("git", ["config", "user.name", "t"], { cwd: workDir });
+    runCli(workDir, ["analyze", "001"]);
+    const itemDir = path.join(workDir, "project", "001");
+
+    for (const f of ["ui-behavior.md", "data-flow.md", "sql.md", "dependencies.md", "dead-code.md"]) {
+      fs.writeFileSync(path.join(itemDir, f), `# ${f}\nNo dead code\n`, "utf8");
+    }
+    fs.writeFileSync(
+      path.join(itemDir, "analysis.md"),
+      "# Analysis: 001\n- **Analysis Date & Time**: `2026-01-01 00:00`\n- **Complexity Level**: `Pending`\n- **Current Status**: `Analyzing`\n## 3. Complexity\n- **Complexity Level**: `High`\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(itemDir, "business-logic.md"),
+      "# Business Logic\n- Status rule: `[Human: Ops Lead]#BL-01`\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(itemDir, "backlog.md"),
+      `# Backlog\n| Voucher ID | Rule | Loc | Question | Conclusion | Source | Evidence | Signoff | Scope | Status |\n|---|---|---|---|---|---|---|---|---|---|\n| \`BL-01\` | Rule | ORD.STS | Meaning of 1 \\| 2? | Active \\| Paid | Human | Note | Alice | Global | Resolved |\n`,
+      "utf8"
+    );
+
+    const verRes = verifySingleItem(workDir, "001");
+    assert.equal(verRes.valid, true, `Multilingual + escaped pipe voucher should pass: ${verRes.errors.join("; ")}`);
+
+    const commitRes = runCli(workDir, ["commit", "001"]);
+    assert.equal(commitRes.status, 0, `commit failed: ${commitRes.stderr}`);
+
+    const updatedAnalysis = fs.readFileSync(path.join(itemDir, "analysis.md"), "utf8");
+    assert.doesNotMatch(updatedAnalysis, /`Pending`/);
+    assert.match(updatedAnalysis, /- \*\*Current Status\*\*: `已完成`/);
+
+    const dict = fs.readFileSync(path.join(workDir, "project", "system", "domain-dictionary.md"), "utf8");
+    assert.match(dict, /Active \\\| Paid/);
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test("regression: pdf blocks direct db-connection.md export, and SQLite scandb ignores sshEnabled and matches codeTables case-insensitively", () => {
+  const workDir = makeTempDir("ra-sec-");
+  try {
+    runCli(workDir, ["init"]);
+    const pdfRes = runCli(workDir, ["pdf", "project/system/db-connection.md"]);
+    assert.notEqual(pdfRes.status, 0, "Direct pdf export of db-connection.md must be blocked");
+    assert.match(pdfRes.stderr, /禁止將包含資料庫連線憑證的 db-connection\.md 匯出為 PDF/);
+
+    const whichSqlite = spawnSync("which", ["sqlite3"], { encoding: "utf8" });
+    if (whichSqlite.status === 0) {
+      const dbPath = path.join(workDir, "local.sqlite");
+      spawnSync("sqlite3", [dbPath, "CREATE TABLE sys_code (k TEXT, v TEXT); INSERT INTO sys_code VALUES ('A', '1');"]);
+      fs.writeFileSync(
+        path.join(workDir, "project", "system", "db-connection.md"),
+        `- **啟用資料庫掃描 (Enabled)**: \`true\`\n- **資料庫產品 (Database Product)**: \`sqlite\`\n- **連線主機或檔案路徑 (Host / Path)**: \`./local.sqlite\`\n- **共用代碼表清單 (Code Tables)**: \`SYS_CODE\`\n- **啟用跳板機 (SSH Enabled)**: \`true\`\n`,
+        "utf8"
+      );
+      const scanRes = runCli(workDir, ["scandb"]);
+      assert.equal(scanRes.status, 0, `SQLite scandb should ignore sshEnabled: ${scanRes.stderr}`);
+      const codeDict = fs.readFileSync(path.join(workDir, "project", "system", "code-dictionary.md"), "utf8");
+      assert.match(codeDict, /SYS_CODE/);
+    }
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
   }

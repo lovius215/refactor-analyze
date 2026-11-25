@@ -62,6 +62,10 @@ function exportMarkdownToPdf(cwd, args = []) {
         );
         defaultMergedPdfPath = path.join(candidateDirect, `${path.basename(candidateDirect)}-report.pdf`);
       } else if (candidateDirect.endsWith(".md")) {
+        if (path.basename(candidateDirect) === "db-connection.md") {
+          fail("資安保護：禁止將包含資料庫連線憑證的 db-connection.md 匯出為 PDF。");
+          return;
+        }
         mdFiles = [candidateDirect];
       } else {
         fail(`目標檔案不是 Markdown (.md) 檔案: ${targetArg}`);

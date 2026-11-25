@@ -220,16 +220,57 @@ function normalizeItemId(rawId) {
   return cleaned;
 }
 
-function isIndexHeaderRow(line) {
+function splitMarkdownRow(line) {
+  const raw = String(line || "").trim();
+  if (!raw.startsWith("|")) return [];
+  const placeholder = "\x00PIPE\x00";
+  const safe = raw.replace(/\\\|/g, placeholder);
+  const parts = safe.split("|").map((c) => c.replace(/\x00PIPE\x00/g, "|").trim());
+  if (parts.length > 0 && parts[0] === "") parts.shift();
+  if (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
+  return parts;
+}
+
+function escapeMarkdownCell(val) {
+  return String(val == null ? "" : val).replace(/(?<!\\)\|/g, "\\|");
+}
+
+function isMarkdownSeparatorRow(cells) {
+  return cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c));
+}
+
+function isResolvedStatus(val) {
+  const s = String(val || "").trim();
+  return /已釐清|已厘清|resolved|confirmed|解決済み|確認済み|해결됨|확인됨/i.test(s);
+}
+
+function isPendingStatus(val) {
+  const s = String(val || "").trim();
+  return /待確認|待确认|pending|unconfirmed|tbd|未確認|要確認|미확인|확인\s*필요/i.test(s);
+}
+
+function isGlobalScope(val) {
+  const s = String(val || "").trim();
+  return /全系統通用|全系统通用|全域|全局|global|system-wide|システム共通|전체\s*시스템/i.test(s);
+}
+
+function isPlaceholderValue(val) {
+  const s = String(val || "").trim();
   return (
-    line.includes("---") ||
-    line.includes("編號") ||
-    line.includes("编号") ||
-    line.includes("功能或 API") ||
-    /\|\s*ID\s*\|/i.test(line) ||
-    line.includes("番号") ||
-    line.includes("번호")
+    !s ||
+    s === "-" ||
+    s.startsWith("*(") ||
+    isPendingStatus(s) ||
+    /待填寫|待填写|待分析|待評估|待评估|to\s*be\s*filled|todo/i.test(s)
   );
+}
+
+function isIndexHeaderRow(line) {
+  const cells = splitMarkdownRow(line);
+  if (cells.length === 0) return true;
+  if (isMarkdownSeparatorRow(cells)) return true;
+  const firstCol = cells[0].replace(/[`*]/g, "").trim();
+  return /^(?:編號|编号|ID|No\.?|番号|번호)$/i.test(firstCol);
 }
 
 function parseIndexItems(cwd) {
@@ -249,10 +290,7 @@ function parseIndexItems(cwd) {
     if (!line.startsWith("|") || isIndexHeaderRow(line)) {
       continue;
     }
-    const parts = line
-      .split("|")
-      .map((p) => p.trim())
-      .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+    const parts = splitMarkdownRow(line);
 
     if (parts.length >= 5) {
       const rawId = parts[0].replace(/`/g, "").trim();
@@ -277,21 +315,22 @@ function updateIndexRowStatus(cwd, targetId, newComplexity, newStatus) {
 
   const lines = fs.readFileSync(indexPath, "utf8").split("\n");
   let updated = false;
+  const placeholder = "\x00PIPE\x00";
 
   const nextLines = lines.map((line) => {
     if (!line.startsWith("|") || isIndexHeaderRow(line)) return line;
-    const parts = line.split("|");
+    const parts = line.replace(/\\\|/g, placeholder).split("|");
     if (parts.length < 6) return line;
-    const cellId = parts[1].replace(/`/g, "").trim();
+    const cellId = parts[1].replace(/\x00PIPE\x00/g, "|").replace(/`/g, "").trim();
     if (normalizeItemId(cellId) === targetId || cellId === targetId) {
-      if (newComplexity && newComplexity !== "待評估") {
-        parts[4] = ` ${newComplexity} `;
+      if (newComplexity && !/^(?:待評估|待评估|Pending|TBD)$/i.test(newComplexity.trim())) {
+        parts[4] = ` ${escapeMarkdownCell(newComplexity)} `;
       }
       if (newStatus) {
-        parts[5] = ` ${newStatus} `;
+        parts[5] = ` ${escapeMarkdownCell(newStatus)} `;
       }
       updated = true;
-      return parts.join("|");
+      return parts.join("|").replace(/\x00PIPE\x00/g, "\\|");
     }
     return line;
   });
@@ -493,49 +532,50 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
     for (const line of lines) {
       if (/^##\s+/.test(line)) {
         hasSectionHeadings = true;
-        inDbTableSection = /資料庫資料表|DB Tables|資料表與欄位讀寫/i.test(line);
+        inDbTableSection = /資料庫資料表|数据库表|DB\s*Tables|資料表與欄位讀寫|数据表与字段读写|データベーステーブル|데이터베이스\s*테이블/i.test(line);
         continue;
       }
       if (hasSectionHeadings && !inDbTableSection) continue;
-      if (!line.startsWith("|") || line.includes("資料表名稱") || line.includes("---")) continue;
-      const parts = line
-        .split("|")
-        .map((p) => p.trim())
-        .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-      if (parts.length >= 2) {
-        const tName = parts[0].replace(/`/g, "").trim();
-        const opRaw = parts[1].replace(/`/g, "").trim().toUpperCase();
-        if (!tName || tName === "待分析" || tName === "-" || tName.startsWith("*(")) continue;
-        // Only accept valid CRUD operation cells like "C/R", "R, U", "CRUD", not arbitrary type words like "String"
-        if (!/^[CRUD/\s,]+$/.test(opRaw)) continue;
-        if (!tableOps.has(tName)) tableOps.set(tName, new Set());
-        for (const char of ["C", "R", "U", "D"]) {
-          if (opRaw.includes(char)) tableOps.get(tName).add(char);
-        }
+      if (!line.startsWith("|")) continue;
+      const parts = splitMarkdownRow(line);
+      if (parts.length < 2 || isMarkdownSeparatorRow(parts)) continue;
+      if (/資料表名稱|数据表名称|Table\s*Name|テーブル名|테이블명/i.test(parts[0])) continue;
+      const tName = parts[0].replace(/`/g, "").trim();
+      const opRaw = parts[1].replace(/`/g, "").trim().toUpperCase();
+      if (!tName || isPlaceholderValue(tName)) continue;
+      // Only accept valid CRUD operation cells like "C/R", "R, U", "CRUD", not arbitrary type words like "String"
+      if (!/^[CRUD/\s,]+$/.test(opRaw)) continue;
+      if (!tableOps.has(tName)) tableOps.set(tName, new Set());
+      for (const char of ["C", "R", "U", "D"]) {
+        if (opRaw.includes(char)) tableOps.get(tName).add(char);
       }
     }
 
     if (tableOps.size > 0) {
       let domainFlows = fs.readFileSync(domainFlowsPath, "utf8");
-      const matrixHeader = "## 2. 資料表與功能編號 CRUD 對照矩陣 (Table CRUD Matrix)";
-      const secIdx = domainFlows.indexOf(matrixHeader);
-      if (secIdx !== -1) {
-        const beforeSec = domainFlows.slice(0, secIdx + matrixHeader.length);
-        const afterSecFull = domainFlows.slice(secIdx + matrixHeader.length).replace(/\r\n/g, "\n");
+      const secHeadingMatch = domainFlows.match(/^##\s*2\.[^\n]*(?:CRUD|對照矩陣|对照矩阵|Matrix|マトリクス|매트릭스)[^\n]*/im);
+      if (secHeadingMatch) {
+        const secIdx = secHeadingMatch.index;
+        const matchedHeader = secHeadingMatch[0];
+        const beforeSec = domainFlows.slice(0, secIdx + matchedHeader.length);
+        const afterSecFull = domainFlows.slice(secIdx + matchedHeader.length).replace(/\r\n/g, "\n");
         const nextHeadingMatch = afterSecFull.match(/\n(?=##\s+)/);
         const secBody = nextHeadingMatch ? afterSecFull.slice(0, nextHeadingMatch.index) : afterSecFull;
         const tailAfterSection = nextHeadingMatch ? afterSecFull.slice(nextHeadingMatch.index) : "";
         const afterLines = secBody.split("\n");
         const existingTableRows = new Map();
         const nonTableLines = [];
+        let existingHeaderBlock = "";
 
         for (const l of afterLines) {
-          if (l.startsWith("|") && !l.includes("資料表名稱") && !l.includes("---")) {
-            const p = l
-              .split("|")
-              .map((x) => x.trim())
-              .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-            if (p.length >= 5 && p[0] !== "待補充") {
+          if (l.startsWith("|")) {
+            const p = splitMarkdownRow(l);
+            if (isMarkdownSeparatorRow(p)) continue;
+            if (/資料表名稱|数据表名称|Table\s*Name|テーブル名|테이블명/i.test(p[0] || "")) {
+              existingHeaderBlock = `\n\n${l}\n|---|---|---|---|---|\n`;
+              continue;
+            }
+            if (p.length >= 5 && !/^(?:待補充|待补充|TBD|Pending)$/i.test(p[0].trim())) {
               const cleanT = p[0].replace(/`/g, "");
               existingTableRows.set(cleanT, {
                 c: p[1],
@@ -546,7 +586,7 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
               continue;
             }
           }
-          if (l.trim() && l.trim() !== "| 待補充 | - | - | - | - |") {
+          if (l.trim() && !/^\|\s*(?:待補充|待补充|TBD|Pending)\s*\|/i.test(l.trim())) {
             nonTableLines.push(l);
           }
         }
@@ -573,6 +613,7 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
         }
 
         const tableHeader =
+          existingHeaderBlock ||
           "\n\n| 資料表名稱 (`project/system/db/`) | `C` (新增編號) | `R` (查詢編號) | `U` (更新編號) | `D` (刪除編號) |\n|---|---|---|---|---|\n";
         const extraSecNotes = nonTableLines.filter((l) => !l.startsWith("|") && l.trim()).join("\n");
         domainFlows =
@@ -596,37 +637,35 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
       .filter((l) => !l.trim().startsWith(">"))
       .join("\n");
     if (
-      !nonQuoteDeadCode.includes("未發現死程式碼") &&
-      !nonQuoteDeadCode.includes("無死程式碼") &&
+      !/未發現死程式碼|無死程式碼|未发现死代码|无死代码|no\s+dead\s+code|デッドコードなし|데드\s*코드\s*없음/i.test(nonQuoteDeadCode) &&
       !nonQuoteDeadCode.includes("(待 AI 分析填寫)")
     ) {
       const lines = nonQuoteDeadCode.split("\n");
       const foundRows = [];
       for (const line of lines) {
-        if (line.startsWith("|") && !line.includes("程式檔案名稱") && !line.includes("---") && !line.includes("待分析")) {
-          const parts = line
-            .split("|")
-            .map((p) => p.trim())
-            .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-          if (parts.length >= 6) {
-            // Official 6-column template: 序號 | Git 分支 | Git Commit Hash | 程式檔案名稱 | 行數範圍 | 判定原因
-            foundRows.push({
-              branch: parts[1].replace(/`/g, "").trim(),
-              commit: parts[2].replace(/`/g, "").trim(),
-              filePath: parts[3].replace(/`/g, "").trim(),
-              lineRange: parts[4].replace(/`/g, "").trim(),
-              reason: parts[5].trim()
-            });
-          } else if (parts.length >= 4) {
-            // Compact 4-column format: 程式檔案名稱 | 行數範圍 | 判定原因 | 代碼
-            foundRows.push({
-              branch: "",
-              commit: "",
-              filePath: parts[0].replace(/`/g, "").trim(),
-              lineRange: parts[1].replace(/`/g, "").trim(),
-              reason: parts[2].trim()
-            });
-          }
+        if (!line.startsWith("|")) continue;
+        const parts = splitMarkdownRow(line);
+        if (parts.length < 4 || isMarkdownSeparatorRow(parts)) continue;
+        if (/程式檔案名稱|程序文件名称|File\s*(?:Name|Path)|ファイル名|파일명/i.test(line)) continue;
+        if (parts.some((p) => /^(?:待分析|待评估|TBD)$/i.test(p.replace(/`/g, "").trim()))) continue;
+        if (parts.length >= 6) {
+          // Official 6-column template: 序號 | Git 分支 | Git Commit Hash | 程式檔案名稱 | 行數範圍 | 判定原因
+          foundRows.push({
+            branch: parts[1].replace(/`/g, "").trim(),
+            commit: parts[2].replace(/`/g, "").trim(),
+            filePath: parts[3].replace(/`/g, "").trim(),
+            lineRange: parts[4].replace(/`/g, "").trim(),
+            reason: parts[5].trim()
+          });
+        } else if (parts.length >= 4) {
+          // Compact 4-column format: 程式檔案名稱 | 行數範圍 | 判定原因 | 代碼
+          foundRows.push({
+            branch: "",
+            commit: "",
+            filePath: parts[0].replace(/`/g, "").trim(),
+            lineRange: parts[1].replace(/`/g, "").trim(),
+            reason: parts[2].trim()
+          });
         }
       }
 
@@ -634,13 +673,19 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
         // Extract fallback Git branch & commit hash from item dead-code.md metadata
         let itemBranch = "-";
         let itemCommit = "-";
-        const combinedGit = itemDeadCode.match(/目標系統 Git 分支\s*\/\s*Commit Hash\*\*：[ \t]*`([^`]+)`\s*@\s*`([^`]+)`/);
+        const combinedGit = itemDeadCode.match(
+          /(?:目標系統 Git 分支|目标系统 Git 分支|Target(?: System)? Git Branch|対象システム Git ブランチ|대상 시스템 Git 브랜치)\s*\/\s*Commit Hash\*\*[：:][ \t]*`([^`]+)`\s*@\s*`([^`]+)`/i
+        );
         if (combinedGit) {
           itemBranch = combinedGit[1].trim();
           itemCommit = combinedGit[2].trim();
         } else {
-          const bMatch = itemDeadCode.match(/目標系統 Git 分支[^`]*`([^`]+)`/);
-          const cMatch = itemDeadCode.match(/目標系統 Git (?:Commit Hash|版本)[^`]*`([^`]+)`/);
+          const bMatch = itemDeadCode.match(
+            /(?:目標系統 Git 分支|目标系统 Git 分支|Target(?: System)? Git Branch|対象システム Git ブランチ|대상 시스템 Git 브랜치)[^`]*`([^`]+)`/i
+          );
+          const cMatch = itemDeadCode.match(
+            /(?:目標系統 Git (?:Commit Hash|版本)|目标系统 Git (?:Commit Hash|版本)|Target(?: System)? Git (?:Commit Hash|Version)|対象システム Git (?:バージョン|Commit Hash)|대상 시스템 Git (?:버전|Commit Hash))[^`]*`([^`]+)`/i
+          );
           if (bMatch) itemBranch = bMatch[1].trim();
           if (cMatch) itemCommit = cMatch[1].trim();
         }
@@ -650,14 +695,14 @@ function aggregateDomainFlowsAndDeadCode(cwd, itemId) {
         const sepIdx = sysDeadCode.indexOf(sepMarker);
         for (const r of foundRows) {
           const filePath = r.filePath;
-          if (!filePath || filePath === "-" || filePath === "無") continue;
+          if (!filePath || filePath === "-" || /^(?:無|无|None|N\/A)$/i.test(filePath)) continue;
           const rowBranch = r.branch && r.branch !== "-" ? r.branch : itemBranch;
           const rowCommit = r.commit && r.commit !== "-" ? r.commit : itemCommit;
           const alreadyExists = sysDeadCode
             .split("\n")
             .some((l) => l.startsWith("|") && l.includes(`\`${normId}\``) && l.includes(`\`${filePath}\``));
           if (alreadyExists) continue;
-          const tableRow = `| \`${normId}\` | \`${rowBranch}\` | \`${rowCommit}\` | \`${filePath}\` | ${r.lineRange || "-"} | ${r.reason || "-"} |\n`;
+          const tableRow = `| \`${normId}\` | \`${rowBranch}\` | \`${rowCommit}\` | \`${filePath}\` | ${escapeMarkdownCell(r.lineRange || "-")} | ${escapeMarkdownCell(r.reason || "-")} |\n`;
           if (sysDeadCode.includes("| `system` |")) {
             sysDeadCode = sysDeadCode.replace("| `system` |", () => tableRow + "| `system` |");
           } else if (sepIdx !== -1) {
@@ -685,27 +730,17 @@ function aggregateDomainDictionary(cwd, itemId) {
   const content = fs.readFileSync(backlogPath, "utf8").replace(/\r\n/g, "\n");
   const lines = content.split("\n");
   const vouchersToPromote = [];
-  const isInvalidVoucherField = (val) =>
-    !val || val === "-" || val.startsWith("*(") || val.includes("待確認") || val.includes("待填寫") || val.includes("待分析");
 
   for (const line of lines) {
-    if (/^##\s+2\./.test(line) || /真實資料真偽驗證探針|Reality Check/i.test(line)) {
+    if (/^##\s+2\./.test(line) || /真實資料真偽驗證探針|真实数据真伪验证探针|Reality Check/i.test(line)) {
       break;
     }
-    if (
-      !line.startsWith("|") ||
-      line.includes("憑證編號") ||
-      line.includes("憑證 ID") ||
-      line.includes("待確認問題") ||
-      line.includes("---")
-    ) {
+    if (!line.startsWith("|")) continue;
+    const parts = splitMarkdownRow(line);
+    if (parts.length < 10 || isMarkdownSeparatorRow(parts)) continue;
+    if (/^(?:憑證編號|憑證\s*ID|凭证\s*ID|Voucher\s*ID|証憑\s*ID|바우처\s*ID)$/i.test(parts[0].replace(/[`*]/g, "").trim())) {
       continue;
     }
-    const parts = line
-      .split("|")
-      .map((p) => p.trim())
-      .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-    if (parts.length < 10) continue;
     const id = parts[0].replace(/`/g, "").trim();
     if (!id || id.includes("待分析") || id.includes("{{") || id.startsWith("*(")) continue;
     const type = parts[1].replace(/`/g, "").trim();
@@ -719,10 +754,10 @@ function aggregateDomainDictionary(cwd, itemId) {
     const status = parts[9].replace(/`/g, "").trim();
 
     if (
-      status.includes("已釐清") &&
-      !isInvalidVoucherField(conclusion) &&
-      !isInvalidVoucherField(signoff) &&
-      (scope.includes("全系統通用") || scope.includes("全域") || scope.toLowerCase().includes("global"))
+      isResolvedStatus(status) &&
+      !isPlaceholderValue(conclusion) &&
+      !isPlaceholderValue(signoff) &&
+      isGlobalScope(scope)
     ) {
       vouchersToPromote.push({
         id,
@@ -743,9 +778,11 @@ function aggregateDomainDictionary(cwd, itemId) {
 
   let dictContent = fs.readFileSync(dictPath, "utf8");
 
-  function insertRowToSection(secTitle, rowStr) {
-    const secIdx = dictContent.indexOf(secTitle);
-    if (secIdx === -1) return;
+  function insertRowToSection(secNumber, rowStr) {
+    const secRegex = new RegExp(`^##\\s*${secNumber}\\.`, "m");
+    const secMatch = dictContent.match(secRegex);
+    if (!secMatch) return;
+    const secIdx = secMatch.index;
     const tableHeaderStr = "|---|---|---|---|---|---|";
     const sepIdx = dictContent.indexOf(tableHeaderStr, secIdx);
     if (sepIdx === -1) return;
@@ -753,7 +790,7 @@ function aggregateDomainDictionary(cwd, itemId) {
     const afterSep = sepIdx + tableHeaderStr.length;
     const before = dictContent.slice(0, afterSep);
     let after = dictContent.slice(afterSep);
-    after = after.replace(/^\r?\n\| \*\(待由各編號 commit 自動匯總\)\* \| - \| - \| - \| - \| - \|/, "");
+    after = after.replace(/^\r?\n\|\s*\*\([^)]*\)\*\s*\|(?:\s*-\s*\|){5}/, "");
     dictContent = before + "\n" + rowStr + after;
   }
 
@@ -767,15 +804,15 @@ function aggregateDomainDictionary(cwd, itemId) {
       continue;
     }
 
-    const isRule = v.type.includes("規則") || v.type.includes("公式") || v.type.includes("流程");
+    const isRule = /規則|规则|公式|流程|rule|formula|flow|ルール|計算式|규칙|공식/i.test(v.type);
     if (isRule) {
-      const label = v.question || v.location || v.type;
-      const row = `| \`${label}\` (${voucherTag}) | ${v.conclusion} | ${v.sourceType || "官方規範"} | ${v.evidence || "-"} | ${v.signoff || "-"} | \`${normId}\` |`;
-      insertRowToSection("## 2. 跨模組通用商業計算公式與規則", row);
+      const label = escapeMarkdownCell(v.question || v.location || v.type);
+      const row = `| \`${label}\` (${voucherTag}) | ${escapeMarkdownCell(v.conclusion)} | ${escapeMarkdownCell(v.sourceType || "Doc")} | ${escapeMarkdownCell(v.evidence || "-")} | ${escapeMarkdownCell(v.signoff || "-")} | \`${normId}\` |`;
+      insertRowToSection(2, row);
     } else {
-      const label = v.location || v.question || v.type;
-      const row = `| \`${label}\` (${voucherTag}) | ${v.conclusion} | ${v.sourceType || "人工調查"} | ${v.evidence || "-"} | ${v.signoff || "-"} | \`${normId}\` |`;
-      insertRowToSection("## 1. 全域業務狀態碼與縮寫欄位辭典", row);
+      const label = escapeMarkdownCell(v.location || v.question || v.type);
+      const row = `| \`${label}\` (${voucherTag}) | ${escapeMarkdownCell(v.conclusion)} | ${escapeMarkdownCell(v.sourceType || "Human")} | ${escapeMarkdownCell(v.evidence || "-")} | ${escapeMarkdownCell(v.signoff || "-")} | \`${normId}\` |`;
+      insertRowToSection(1, row);
     }
   }
 
@@ -793,6 +830,13 @@ module.exports = {
   calculateFileComplexity,
   getTargetSystemPathFromOverview,
   normalizeItemId,
+  splitMarkdownRow,
+  escapeMarkdownCell,
+  isMarkdownSeparatorRow,
+  isResolvedStatus,
+  isPendingStatus,
+  isGlobalScope,
+  isPlaceholderValue,
   isIndexHeaderRow,
   parseIndexItems,
   updateIndexRowStatus,

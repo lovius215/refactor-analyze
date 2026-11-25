@@ -12,6 +12,9 @@ const {
   calculateFileComplexity,
   getTargetSystemPathFromOverview,
   normalizeItemId,
+  splitMarkdownRow,
+  isMarkdownSeparatorRow,
+  isPendingStatus,
   parseIndexItems,
   updateIndexRowStatus,
   aggregateDomainFlowsAndDeadCode,
@@ -342,13 +345,19 @@ function refreshItemMetadata(itemRelDir, meta) {
   for (const filePath of files) {
     if (!filePath.endsWith(".md")) continue;
     let content = fs.readFileSync(filePath, "utf8");
-    content = content.replace(/(執行分析的時間日期\*\*：`)[^`]+(`)/g, (_, p1, p2) => `${p1}${meta.ANALYSIS_TIME}${p2}`);
+    content = content.replace(
+      /((?:執行分析的時間日期|执行分析的时间日期|Analysis Date(?:\s*&\s*Time)?|分析実行日時|분석 실행 일시)\*\*[：:]\s*`)[^`]+(`)/gi,
+      (_, p1, p2) => `${p1}${meta.ANALYSIS_TIME}${p2}`
+    );
     if (meta.GIT_BRANCH && meta.GIT_BRANCH !== "待確認") {
-      content = content.replace(/(目標系統 Git 分支 \(Branch\)\*\*：`)[^`]+(`)/g, (_, p1, p2) => `${p1}${meta.GIT_BRANCH}${p2}`);
+      content = content.replace(
+        /((?:目標系統 Git 分支(?: \(Branch\))?|目标系统 Git 分支(?: \(Branch\))?|Target(?: System)? Git Branch|対象システム Git ブランチ|대상 시스템 Git 브랜치)\*\*[：:]\s*`)[^`]+(`)/gi,
+        (_, p1, p2) => `${p1}${meta.GIT_BRANCH}${p2}`
+      );
     }
     if (meta.GIT_COMMIT && meta.GIT_COMMIT !== "待確認") {
       content = content.replace(
-        /(目標系統 Git (?:版本 \(Commit Hash \/ Tag\)|Commit Hash)\*\*：`)[^`]+(`)/g,
+        /((?:目標系統 Git (?:版本 \(Commit Hash \/ Tag\)|Commit Hash|版本)|目标系统 Git (?:版本 \(Commit Hash \/ Tag\)|Commit Hash|版本)|Target(?: System)? Git (?:Commit Hash|Version)|対象システム Git (?:バージョン|Commit Hash)|대상 시스템 Git (?:버전|Commit Hash))\*\*[：:]\s*`)[^`]+(`)/gi,
         (_, p1, p2) => `${p1}${meta.GIT_COMMIT}${p2}`
       );
     }
@@ -359,7 +368,7 @@ function refreshItemMetadata(itemRelDir, meta) {
       meta.GIT_COMMIT !== "待確認"
     ) {
       content = content.replace(
-        /(目標系統 Git 分支\s*\/\s*Commit Hash\*\*：`)[^`]+(`\s*@\s*`)[^`]+(`)/g,
+        /((?:目標系統 Git 分支|目标系统 Git 分支|Target(?: System)? Git Branch|対象システム Git ブランチ|대상 시스템 Git 브랜치)\s*\/\s*Commit Hash\*\*[：:]\s*`)[^`]+(`\s*@\s*`)[^`]+(`)/gi,
         (_, p1, p2, p3) => `${p1}${meta.GIT_BRANCH}${p2}${meta.GIT_COMMIT}${p3}`
       );
     }
@@ -407,27 +416,23 @@ function commitItem(args = []) {
       const backlogContent = fs.readFileSync(backlogPath, "utf8").replace(/\r\n/g, "\n");
       const sec1Lines = [];
       for (const l of backlogContent.split("\n")) {
-        if (/^##\s+2\./.test(l) || /真實資料真偽驗證探針|Reality Check/i.test(l)) break;
+        if (/^##\s+2\./.test(l) || /真實資料真偽驗證探針|真实数据真伪验证探针|Reality Check/i.test(l)) break;
         sec1Lines.push(l);
       }
       const pendingLines = sec1Lines.filter((l) => {
+        if (!l.startsWith("|")) return false;
+        const parts = splitMarkdownRow(l);
+        if (parts.length < 2 || isMarkdownSeparatorRow(parts)) return false;
+        const firstCol = parts[0].replace(/[`*]/g, "").trim();
         if (
-          !l.startsWith("|") ||
-          l.includes("憑證 ID") ||
-          l.includes("憑證編號") ||
-          l.includes("待確認問題") ||
-          l.includes("---") ||
-          l.includes("待分析")
+          /^(?:憑證編號|憑證\s*ID|凭证\s*ID|Voucher\s*ID|証憑\s*ID|바우처\s*ID)$/i.test(firstCol) ||
+          firstCol.includes("待分析") ||
+          firstCol.startsWith("*(")
         ) {
           return false;
         }
-        const parts = l
-          .split("|")
-          .map((p) => p.trim())
-          .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-        if (parts.length < 2) return false;
         const statusCell = parts[parts.length - 1];
-        return statusCell.includes("待確認");
+        return isPendingStatus(statusCell);
       });
       if (pendingLines.length > 0) {
         finalStatus = "待確認 (Backlog)";
@@ -436,16 +441,24 @@ function commitItem(args = []) {
 
     if (fs.existsSync(analysisPath)) {
       let analysisContent = fs.readFileSync(analysisPath, "utf8");
-      const compMatches = Array.from(analysisContent.matchAll(/-\s*\*\*複雜度等級\*\*：`([^`]+)`/g))
+      const compRegex = /-\s*\*\*(?:複雜度等級|复杂度等级|Complexity(?: Level)?|複雑度(?:レベル)?|복잡도(?: 등급)?)\*\*[：:]\s*`([^`]+)`/gi;
+      const compMatches = Array.from(analysisContent.matchAll(compRegex))
         .map((m) => m[1].trim())
         .filter(Boolean);
-      const nonPlaceholderComp = compMatches.find((c) => c !== "待評估");
+      const nonPlaceholderComp = compMatches.find((c) => !/^(?:待評估|待评估|Pending|TBD)$/i.test(c));
       if (nonPlaceholderComp) {
         finalComplexity = nonPlaceholderComp;
+        analysisContent = analysisContent.replace(
+          /(-\s*\*\*(?:複雜度等級|复杂度等级|Complexity(?: Level)?|複雑度(?:レベル)?|복잡도(?: 등급)?)\*\*[：:]\s*`)(?:待評估|待评估|Pending|TBD)(`)/gi,
+          (_, p1, p2) => `${p1}${finalComplexity}${p2}`
+        );
       } else if (compMatches.length > 0) {
         finalComplexity = compMatches[0];
       }
-      analysisContent = analysisContent.replace(/(-\s*\*\*目前的狀態\*\*：`)[^`]+(`)/, `$1${finalStatus}$2`);
+      analysisContent = analysisContent.replace(
+        /(-\s*\*\*(?:目前的狀態|目前的状态|Current Status|現在のステータス|현재 상태)\*\*[：:]\s*`)[^`]+(`)/i,
+        (_, p1, p2) => `${p1}${finalStatus}${p2}`
+      );
       fs.writeFileSync(analysisPath, analysisContent, "utf8");
     }
 

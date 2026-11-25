@@ -154,7 +154,7 @@ function scanDatabase(cwd) {
     return;
   }
 
-  if (cfg.sshEnabled && (!cfg.sshHost || !cfg.sshUser)) {
+  if (cfg.sshEnabled && cfg.product !== "sqlite" && (!cfg.sshHost || !cfg.sshUser)) {
     fail(
       "SSH 跳板機設定不完整：已啟用跳板機 (SSH Enabled = true)，但缺少「跳板機主機 (SSH Host)」或「跳板機帳號 (SSH Username)」。請確認格式是否包含反引號 `...`。"
     );
@@ -165,7 +165,9 @@ function scanDatabase(cwd) {
   let connectPort = cfg.port || getDefaultDbPort(cfg.product);
   let controlSocketPath = null;
 
-  if (cfg.sshEnabled && cfg.sshHost && cfg.sshUser) {
+  if (cfg.sshEnabled && cfg.product === "sqlite") {
+    console.log("[SSH 跳板機提示] SQLite 為本機檔案路徑，已自動略過 SSH 跳板機設定。");
+  } else if (cfg.sshEnabled && cfg.sshHost && cfg.sshUser) {
     if (!connectPort) {
       fail("SSH 跳板機設定不完整：無法推斷目標資料庫連接埠，請在 db-connection.md 填寫「連接埠 (Port)」。");
       return;
@@ -405,10 +407,13 @@ function scanSqlite(cwd, cfg, now) {
 
   const codeDictEntries = [];
   if (cfg.codeTables && cfg.codeTables.length > 0) {
+    const lowerSqliteMap = new Map();
+    for (const k of tableColsByName.keys()) lowerSqliteMap.set(k.toLowerCase(), k);
     for (const ct of cfg.codeTables) {
-      const colNames = tableColsByName.get(ct);
+      const matchedName = tableColsByName.has(ct) ? ct : lowerSqliteMap.get(ct.toLowerCase());
+      const colNames = matchedName ? tableColsByName.get(matchedName) : null;
       if (!colNames || colNames.length === 0) continue;
-      const safeCt = ct.replace(/"/g, '""');
+      const safeCt = matchedName.replace(/"/g, '""');
       const dataRes = runSqlite(`SELECT * FROM "${safeCt}" LIMIT 1000;`);
       if (dataRes.status === 0) {
         const dataRows = (dataRes.stdout || "")
@@ -1006,61 +1011,141 @@ function scanOracle(cwd, cfg, host, port, now) {
     return;
   }
 
+  const consRes = runSqlplus(`
+    SELECT c.TABLE_NAME || CHR(9) || cc.COLUMN_NAME || CHR(9) || c.CONSTRAINT_TYPE || CHR(9) ||
+           NVL(rc.TABLE_NAME, '') || CHR(9) || NVL(rcc.COLUMN_NAME, '') || CHR(9) || NVL(c.DELETE_RULE, '')
+    FROM USER_CONSTRAINTS c
+    JOIN USER_CONS_COLUMNS cc ON c.CONSTRAINT_NAME = cc.CONSTRAINT_NAME
+    LEFT JOIN USER_CONSTRAINTS rc ON c.R_CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+    LEFT JOIN USER_CONS_COLUMNS rcc ON rc.CONSTRAINT_NAME = rcc.CONSTRAINT_NAME AND cc.POSITION = rcc.POSITION
+    WHERE c.CONSTRAINT_TYPE IN ('P', 'R')
+    ORDER BY c.TABLE_NAME, cc.POSITION;
+  `);
+  const idxRes = runSqlplus(`
+    SELECT i.TABLE_NAME || CHR(9) || i.INDEX_NAME || CHR(9) || i.UNIQUENESS || CHR(9) || ic.COLUMN_NAME
+    FROM USER_INDEXES i
+    JOIN USER_IND_COLUMNS ic ON i.INDEX_NAME = ic.INDEX_NAME
+    ORDER BY i.TABLE_NAME, i.INDEX_NAME, ic.COLUMN_POSITION;
+  `);
   const viewRes = runSqlplus(`SELECT VIEW_NAME || CHR(9) || 'Oracle View' FROM USER_VIEWS ORDER BY VIEW_NAME;`);
   const procRes = runSqlplus(
     `SELECT OBJECT_NAME || CHR(9) || OBJECT_TYPE || CHR(9) || STATUS FROM USER_OBJECTS WHERE OBJECT_TYPE IN ('PROCEDURE','FUNCTION','PACKAGE') ORDER BY OBJECT_NAME;`
+  );
+  const srcRes = runSqlplus(
+    `SELECT NAME || CHR(9) || TYPE || CHR(9) || REPLACE(REPLACE(TEXT, CHR(13), ' '), CHR(10), ' ') FROM USER_SOURCE WHERE TYPE IN ('PROCEDURE','FUNCTION','PACKAGE','PACKAGE BODY') ORDER BY NAME, TYPE, LINE;`
   );
   const trigRes = runSqlplus(
     `SELECT TRIGGER_NAME || CHR(9) || TABLE_NAME || CHR(9) || TRIGGER_TYPE || CHR(9) || TRIGGERING_EVENT FROM USER_TRIGGERS ORDER BY TRIGGER_NAME;`
   );
 
-  warnIfQueryFailed("Oracle", "USER_VIEWS", viewRes);
-  warnIfQueryFailed("Oracle", "USER_OBJECTS", procRes);
-  warnIfQueryFailed("Oracle", "USER_TRIGGERS", trigRes);
+  warnIfQueryFailed("Oracle", "USER_CONSTRAINTS", consRes, "sqlplus");
+  warnIfQueryFailed("Oracle", "USER_INDEXES", idxRes, "sqlplus");
+  warnIfQueryFailed("Oracle", "USER_VIEWS", viewRes, "sqlplus");
+  warnIfQueryFailed("Oracle", "USER_OBJECTS", procRes, "sqlplus");
+  warnIfQueryFailed("Oracle", "USER_TRIGGERS", trigRes, "sqlplus");
+
+  const pkSetByTable = new Map();
+  const fkListByTable = new Map();
+  const fkColBadgeByTable = new Map();
+  for (const line of splitOutputLines(consRes.stdout)) {
+    const p = line.trim().split("\t");
+    if (p.length < 3) continue;
+    const [tName, colName, cType, refTable, refCol, delRule] = p;
+    if (cType === "P") {
+      if (!pkSetByTable.has(tName)) pkSetByTable.set(tName, new Set());
+      pkSetByTable.get(tName).add(colName);
+    } else if (cType === "R" && refTable) {
+      if (!fkListByTable.has(tName)) fkListByTable.set(tName, []);
+      fkListByTable.get(tName).push({
+        column: colName,
+        refTable,
+        refColumn: refCol || "-",
+        rule: delRule ? `ON DELETE ${delRule}` : "-"
+      });
+      if (!fkColBadgeByTable.has(tName)) fkColBadgeByTable.set(tName, new Map());
+      fkColBadgeByTable.get(tName).set(colName, `FK -> ${refTable}.${refCol || "?"}`);
+    }
+  }
+
+  const idxMapByTable = new Map();
+  const idxColSetByTable = new Map();
+  for (const line of splitOutputLines(idxRes.stdout)) {
+    const p = line.trim().split("\t");
+    if (p.length < 4) continue;
+    const [tName, idxName, uniq, colName] = p;
+    if (!idxMapByTable.has(tName)) idxMapByTable.set(tName, new Map());
+    const tIdx = idxMapByTable.get(tName);
+    if (!tIdx.has(idxName)) {
+      tIdx.set(idxName, { name: idxName, unique: uniq === "UNIQUE" ? "UNIQUE" : "INDEX", cols: [] });
+    }
+    tIdx.get(idxName).cols.push(colName);
+    if (!idxColSetByTable.has(tName)) idxColSetByTable.set(tName, new Set());
+    idxColSetByTable.get(tName).add(colName);
+  }
 
   const tableMap = new Map();
-  for (const line of (colRes.stdout || "").split("\n").filter(Boolean)) {
+  for (const line of splitOutputLines(colRes.stdout)) {
     const parts = line.trim().split("\t");
     if (parts.length < 4) continue;
     const [tName, cName, cType, isNull, cComment] = parts;
     if (!tableMap.has(tName)) tableMap.set(tName, []);
+    const badges = [];
+    if (pkSetByTable.get(tName)?.has(cName)) badges.push("PK");
+    if (fkColBadgeByTable.get(tName)?.has(cName)) badges.push(fkColBadgeByTable.get(tName).get(cName));
+    else if (idxColSetByTable.get(tName)?.has(cName)) badges.push("IDX");
     tableMap.get(tName).push({
       name: cName,
       type: cType,
       nullable: isNull === "N" ? "NO" : "YES",
       defaultVal: "",
-      pk: "",
+      pk: badges.join(", "),
       comment: cComment || ""
     });
   }
 
   const summaryRows = [];
   for (const [tName, cols] of tableMap.entries()) {
-    writeTableMarkdown(cwd, tName, cols, "", now, [], []);
-    summaryRows.push({ name: tName, count: cols.length, pk: "-", comment: "" });
+    const fkList = fkListByTable.get(tName) || [];
+    const idxList = idxMapByTable.has(tName)
+      ? Array.from(idxMapByTable.get(tName).values()).map((x) => ({
+          name: x.name,
+          unique: x.unique,
+          columns: x.cols.join(", ")
+        }))
+      : [];
+    writeTableMarkdown(cwd, tName, cols, "", now, fkList, idxList);
+    const pkCols = cols
+      .filter((c) => c.pk.includes("PK"))
+      .map((c) => c.name)
+      .join(", ");
+    summaryRows.push({ name: tName, count: cols.length, pk: pkCols || "-", comment: "" });
   }
 
-  const views = (viewRes.stdout || "")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => {
-      const [name, desc] = l.trim().split("\t");
-      return { name, desc: desc || "-" };
-    });
-  const procs = (procRes.stdout || "")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => {
-      const [name, type, desc] = l.trim().split("\t");
-      return { name, type: type || "PROCEDURE", desc: desc || "-" };
-    });
-  const triggers = (trigRes.stdout || "")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => {
-      const [name, table, timing, desc] = l.trim().split("\t");
-      return { name, table: table || "-", timing: timing || "-", desc: desc || "-" };
-    });
+  const procSourceMap = new Map();
+  if (srcRes.status === 0 && srcRes.stdout) {
+    for (const line of splitOutputLines(srcRes.stdout)) {
+      const p = line.split("\t");
+      if (p.length < 3) continue;
+      const name = p[0].trim();
+      const srcLine = p.slice(2).join("\t");
+      if (!procSourceMap.has(name)) procSourceMap.set(name, []);
+      procSourceMap.get(name).push(srcLine);
+    }
+  }
+
+  const views = splitOutputLines(viewRes.stdout).map((l) => {
+    const [name, desc] = l.trim().split("\t");
+    return { name, desc: (desc || "-").slice(0, 160), fullSql: desc || "" };
+  });
+  const procs = splitOutputLines(procRes.stdout).map((l) => {
+    const [name, type, desc] = l.trim().split("\t");
+    const fullSql = procSourceMap.has(name) ? procSourceMap.get(name).join("\n") : "";
+    return { name, type: type || "PROCEDURE", desc: desc || "-", fullSql };
+  });
+  const triggers = splitOutputLines(trigRes.stdout).map((l) => {
+    const [name, table, timing, desc] = l.trim().split("\t");
+    return { name, table: table || "-", timing: timing || "-", desc: desc || "-", fullSql: desc || "" };
+  });
 
   const codeDictEntries = [];
   if (cfg.codeTables && cfg.codeTables.length > 0) {
