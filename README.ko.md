@@ -83,7 +83,15 @@ mkdir shop-refactor-workspace && cd shop-refactor-workspace
 refactor-analyze init --full --lang ko
 ```
 
-### Step 2. AI를 통한 시스템 전체 파악 (`rai`)
+### Step 2. AI를 통한 시스템 전체 파악 (`rai`) 및 스캔 모드 선택
+AI 채팅에서 `rai /path/to/legacy-shop`을 실행하면 AI가 프로젝트 규모를 먼저 평가하고 **스캔 전 3가지 스캔 모드를 제시합니다**(`1` / `2` / `3` 중 선택):
+1. **전체 AI 스캔**: AI가 소스 및 설정 파일을 직접 정독(중소규모 또는 복잡한 동적 라우팅/XML 프로젝트에 적합).
+2. **프로그램 스캔**: `refactor-analyze scan-entries [경로] --write-index`로 0-Token 초판 `project/index.md` 생성(기존 항목이 있으면 `--force` 필요).
+3. **하이브리드 스캔** *(권장)*: `scan-entries`로 0-Token 후보 목록 `project/system/entry-candidates.md`를 먼저 추출한 뒤 AI가 업무 모듈별 분류와 누락 보완을 수행.
+
+※ 동적 라우팅이나 폐기 의심 진입점 등 불확실한 항목은 AI가 능동적으로 사용자에게 질문합니다.
+
+### Step 2 (예시). 산출물 예시
 AI 에이전트(Gemini / Claude / Cursor / Antigravity) 대화창에 입력:
 ```text
 rai /Users/dev/projects/legacy-shop

@@ -132,6 +132,7 @@ scripts\uninstall.bat
          ▼
 2. AI 對話啟動與 Git 對齊 (輸入 refactor:init [目標系統路徑] 或 rai)
    - 鎖定專案語言 (zh-TW / zh-CN / en / ja / ko)，詢問是否向 Git remote 對齊
+   - 掃描前先評估規模並讓您選擇：1. 全 AI 掃描 / 2. 程式掃描 / 3. 混合掃描（遇不確定性主動提問）
    - 產出系統大概 (project/system/，判定 APP / 桌面應用程式 / 網頁 + 涵蓋說明)
    - 產出分類編號清單 (project/index.md：同分類放一起、無法歸類放「其他」)
          │
@@ -160,8 +161,20 @@ mkdir shop-refactor-workspace && cd shop-refactor-workspace
 refactor-analyze init --full --lang zh-TW
 ```
 
-### 步驟 2：啟動 AI 進行第一階段全域盤點 (`rai`)
+### 步驟 2：啟動 AI 進行第一階段全域盤點 (`rai`) 與選擇掃描模式
 在 AI Agent（Gemini / Claude / Cursor / Antigravity）的對話框輸入：
+```text
+rai /path/to/legacy-system
+```
+AI 會先評估專案規模與技術棧，並**主動提供三種掃描模式讓您選擇**（您也可以在對話直接回覆數字 `1` / `2` / `3`，或在終端機先執行 CLI）：
+
+| 模式 | 執行方式 | 適用場景 |
+|---|---|---|
+| **1. 全 AI 掃描** | 在 `rai` 回覆 `1`（由 AI 深度閱讀原始碼與設定檔抓進入點） | 中小型專案（< 200 支程式），或動態路由／XML／反射派發複雜的舊系統 |
+| **2. 程式掃描** | 在 `rai` 回覆 `2`，或終端機執行 `refactor-analyze scan-entries <路徑> --write-index` | 極大型標準框架專案，想先 **0-Token** 快速產出 `project/index.md` 初版清單（若已有項目需加 `--force` 才覆寫） |
+| **3. 混合掃描** *(推薦)* | 在 `rai` 回覆 `3`，或先跑 `refactor-analyze scan-entries <路徑>` 產出 `entry-candidates.md` 再交由 AI 分類與補漏 | 絕大多數中大型企業系統（省下約 70% 找檔 Token，同時保留 AI 語意分類與動態路由補漏） |
+
+> 💡 無論採用哪種模式，只要掃描過程遇到不確定性（例如動態路由、疑似廢棄或外部觸發不明的進入點），AI 都會**主動在對話中向您提問確認**，不自行猜測。
 ```text
 rai /Users/dev/projects/legacy-shop
 ```

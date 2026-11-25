@@ -68,7 +68,11 @@
 ## 完整操作步驟
 
 1. **建立工作區**：執行 `refactor-analyze init --full`。
-2. **啟動 AI 初始盤點**：在 AI 對話輸入 `rai`（或 `rai /path/to/legacy`），鎖定語言、確認是否向 Git remote 對齊，產出 `project/system/`（判斷系統屬於 **APP / 桌面應用程式 / 網頁** 並說明涵蓋範圍）與 `project/index.md`（**同分類放在一起，無法歸類放「其他」**，賦予編號 `001`, `002`...）。
+2. **啟動 AI 初始盤點 (`rai`) 與選擇掃描模式**：在 AI 對話輸入 `rai`（或 `rai /path/to/legacy`），鎖定語言、確認是否向 Git remote 對齊；AI 會先評估專案規模，並**主動提供三種掃描模式讓您選擇**：
+   - **1. 全 AI 掃描**：由 AI 直接閱讀程式碼與設定檔（適合中小型專案或動態路由／XML 複雜的舊系統）。
+   - **2. 程式掃描**：執行 `refactor-analyze scan-entries [路徑] --write-index`，0-Token 快速產出 `project/index.md` 初版（若已有內容需加 `--force`）。
+   - **3. 混合掃描** *(推薦)*：先執行 `refactor-analyze scan-entries` 產出候選清單 `project/system/entry-candidates.md`，再由 AI 讀取候選處做業務模組分類、廢棄判定與補漏。
+   - 若掃描遇到不確定性（如動態路由、疑似廢棄進入點），AI 會**主動向您提問確認**；接著產出 `project/system/`（判斷 **APP / 桌面應用程式 / 網頁** 並說明涵蓋範圍）與 `project/index.md`（**同分類放在一起，無法歸類放「其他」**，賦予編號 `001`, `002`...）。
 3. **掃描資料庫**：填寫 `project/system/db-connection.md` 後執行 `refactor-analyze scandb`（或 `ras`），實際抓出所有資料表與欄位。
 4. **依編號分析業務邏輯**：執行 `refactor-analyze analyze 001` 與 AI 指令 `raa 001`，在 `project/001/` 下產出 `analysis.md`、`business-logic.md`、`ui-behavior.md`、`data-flow.md`、`sql.md`、`dependencies.md`、`dead-code.md` 與自動生成的 `backlog.md`。
 5. **補充 Backlog 並重新分析**：在 `project/001/backlog.md` 補上未知欄位或規則說明後，執行 `rar 001` 再分析一次。

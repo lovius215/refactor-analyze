@@ -83,7 +83,15 @@ mkdir shop-refactor-workspace && cd shop-refactor-workspace
 refactor-analyze init --full --lang ja
 ```
 
-### Step 2. AI によるシステム全体把握 (`rai`)
+### Step 2. AI によるシステム全体把握 (`rai`) とスキャンモード選択
+AI チャットで `rai /path/to/legacy-shop` を実行すると、AI がプロジェクト規模を評価し、**スキャン前に 3 つのモードを選択肢として提示します**（`1` / `2` / `3` で回答可能）：
+1. **全AIスキャン**：AI がソース・設定ファイルを直接精読（中小規模や複雑な動的ルーティング向け）。
+2. **プログラムスキャン**：`refactor-analyze scan-entries [パス] --write-index` で 0-Token 初版 `project/index.md` を生成（既存項目がある場合は `--force`）。
+3. **ハイブリッドスキャン** *(推奨)*：`scan-entries` で候補一覧 `project/system/entry-candidates.md` を 0-Token 抽出し、AI が業務分類・補完を実施。
+
+※ 動的ルーティングや廃止疑いなどの不確実な点は AI が能動的に質問します。
+
+### Step 2 (例). 出力イメージ
 AI チャット（Gemini / Claude / Cursor / Antigravity）で以下を入力：
 ```text
 rai /Users/dev/projects/legacy-shop

@@ -68,7 +68,11 @@
 ## 完整使用步骤
 
 1. **建立工作区**：在独立目录执行 `refactor-analyze init --full --lang zh-CN`。
-2. **启动 AI 初始盘点**：在 AI 对话输入 `rai`（或 `rai /path/to/legacy`），锁定语言、确认是否向 Git remote 对齐，产出 `project/system/`（判断系统属于 **APP / 桌面应用程序 / 网页** 并说明涵盖范围）与 `project/index.md`（**同分类放在一起，无法归类的统一放在“其他”**，赋予编号 `001`, `002`...）。
+2. **启动 AI 初始盘点 (`rai`) 与选择扫描模式**：在 AI 对话输入 `rai`（或 `rai /path/to/legacy`），锁定语言、确认是否向 Git remote 对齐；AI 会先评估项目规模，并**主动提供三种扫描模式供您选择**：
+   - **1. 全 AI 扫描**：由 AI 直接阅读源代码与配置文件（适合中小型项目或动态路由／XML 复杂的旧系统）。
+   - **2. 程序扫描**：执行 `refactor-analyze scan-entries [路径] --write-index`，0-Token 快速产出 `project/index.md` 初版（若已有内容需加 `--force`）。
+   - **3. 混合扫描** *(推荐)*：先执行 `refactor-analyze scan-entries` 产出候选清单 `project/system/entry-candidates.md`，再由 AI 读取候选处做业务模块分类、废弃判定与补漏。
+   - 若扫描遇到不确定性（如动态路由、疑似废弃入口点），AI 会**主动向您提问确认**；接着产出 `project/system/`（判断 **APP / 桌面应用程序 / 网页** 并说明涵盖范围）与 `project/index.md`（**同分类放在一起，无法归类的统一放在“其他”**，赋予编号 `001`, `002`...）。
 3. **扫描数据库**：填写 `project/system/db-connection.md` 后执行 `refactor-analyze scandb`（或 `ras`），实际抓取所有数据表与字段。
 4. **按编号分析业务逻辑**：执行 `refactor-analyze analyze 001` 与 AI 指令 `raa 001`，在 `project/001/` 下产出 `analysis.md`、`business-logic.md`、`data-flow.md`、`sql.md`、`dependencies.md`、`dead-code.md` 与自动生成的 `backlog.md`。
 5. **补充 Backlog 并重新分析**：在 `project/001/backlog.md` 补上未知字段或规则说明后，执行 `rar 001` 再分析一次。
